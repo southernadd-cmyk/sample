@@ -24,14 +24,26 @@
       </div>
       <div class="or"><span>or</span></div>
       <div class="file-row">
-        <label class="file-button">LOAD LOCAL AUDIO<input id="audioFile" type="file" accept="audio/*"></label>
-        <span class="hint">Audio is split into 16 equal slices. Use audio you have permission to sample.</span>
+        <label class="file-button">LOAD LOCAL MEDIA<input id="audioFile" type="file" accept="audio/*,video/*"></label>
+        <span class="hint">Audio is sampled into 16 slices. Video files can also drive the visual playback. Use media you have permission to sample.</span>
       </div>
       <div id="message" class="message" aria-live="polite"></div>
     </section>
 
     <section class="workspace">
       <div class="left panel">
+        <div id="videoPanel" class="video-panel hidden" aria-hidden="true">
+          <div class="video-head">
+            <span>VIDEO PLAYBACK</span>
+            <span id="videoStatus">NO VIDEO</span>
+          </div>
+          <div class="video-stage">
+            <div id="youtubePlayer"></div>
+            <video id="localVideo" muted playsinline preload="metadata"></video>
+            <div id="videoPlaceholder" class="video-placeholder">LOAD A YOUTUBE URL OR LOCAL VIDEO</div>
+          </div>
+        </div>
+
         <div class="screen">
           <div class="screen-meta">
             <span id="trackTitle">NO TRACK LOADED</span>
@@ -48,6 +60,7 @@
           <label>MASTER<input id="masterVolume" type="range" min="0" max="1.2" value="0.9" step="0.01"></label>
           <button id="autoChop" class="toggle">AUTO CHOP: TRANSIENTS</button>
           <button id="equalChop" class="toggle">EQUAL 16</button>
+          <button id="videoMode" class="toggle">VIDEO MODE: OFF</button>
           <button id="modeBtn" class="toggle" data-mode="oneshot">MODE: ONE SHOT</button>
           <button id="chokeBtn" class="toggle active" aria-pressed="true">MONO CHOKE: ON</button>
           <button id="stopAll" class="danger">STOP ALL</button>
