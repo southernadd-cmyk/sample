@@ -44,3 +44,16 @@ body{margin:0;background:radial-gradient(circle at 30% 0,#252a25 0,#101210 48%,#
 .source-card.active .source-use{color:var(--lime)}
 .sources-empty{color:var(--muted);font-size:10px;padding:6px 2px}
 @media(max-width:700px){.topbar{align-items:flex-start}.brand{gap:10px}.brand-logo{width:min(260px,62vw)}.brand-copy{display:none}}
+
+.midi-panel{margin-top:14px;padding:12px;border:1px solid var(--line);border-radius:10px;background:#121512}
+.midi-head{display:flex;justify-content:space-between;gap:12px;align-items:center}
+.midi-head>div:first-child{display:flex;gap:10px;align-items:center;min-width:0}
+#midiStatus{font-size:10px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.midi-actions{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}
+.midi-actions button{padding:8px 10px;font-size:10px}
+.midi-body{display:grid;grid-template-columns:minmax(180px,280px) 1fr;gap:12px;align-items:end;margin-top:10px}
+.midi-body label{display:flex;flex-direction:column;gap:5px;font-size:10px;letter-spacing:.1em;color:var(--muted)}
+.midi-body select{background:#0d0f0d;color:var(--ink);border:1px solid var(--line);border-radius:7px;padding:9px;min-width:0}
+.midi-map-status{font-size:10px;color:var(--amber);padding-bottom:9px}
+.shortcut{font-size:9px;opacity:.7;margin-left:5px}
+@media(max-width:700px){.midi-head{align-items:flex-start;flex-direction:column}.midi-actions{justify-content:flex-start}.midi-body{grid-template-columns:1fr}.midi-map-status{padding-bottom:0}}
