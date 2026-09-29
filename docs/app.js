@@ -1,8 +1,9 @@
 const API_BASE=(window.SAMPLER_API_BASE || 'https://sample-production-df5c.up.railway.app').replace(/\/$/, '');
 const keys=['1','2','3','4','q','w','e','r','a','s','d','f','z','x','c','v'];
-const els={pads:document.querySelector('#pads'),url:document.querySelector('#youtubeUrl'),loadYoutube:document.querySelector('#loadYoutube'),file:document.querySelector('#audioFile'),message:document.querySelector('#message'),title:document.querySelector('#trackTitle'),duration:document.querySelector('#duration'),waveform:document.querySelector('#waveform'),selectedInfo:document.querySelector('#selectedInfo'),editPad:document.querySelector('#editPad'),editTime:document.querySelector('#editTime'),master:document.querySelector('#masterVolume'),modeBtn:document.querySelector('#modeBtn'),chokeBtn:document.querySelector('#chokeBtn'),stopAll:document.querySelector('#stopAll'),resetSlice:document.querySelector('#resetSlice'),audioState:document.querySelector('#audioState'),autoChop:document.querySelector('#autoChop'),equalChop:document.querySelector('#equalChop'),recordLayer:document.querySelector('#recordLayer'),stopRecord:document.querySelector('#stopRecord'),playLayers:document.querySelector('#playLayers'),stopLayers:document.querySelector('#stopLayers'),exportWav:document.querySelector('#exportWav'),layers:document.querySelector('#layers'),recordStatus:document.querySelector('#recordStatus'),recordClock:document.querySelector('#recordClock'),videoMode:document.querySelector('#videoMode'),videoPanel:document.querySelector('#videoPanel'),videoStatus:document.querySelector('#videoStatus'),youtubePlayer:document.querySelector('#youtubePlayer'),localVideo:document.querySelector('#localVideo'),videoPlaceholder:document.querySelector('#videoPlaceholder'),captureYoutube:document.querySelector('#captureYoutube'),stopCapture:document.querySelector('#stopCapture'),sourceBpm:document.querySelector('#sourceBpm'),targetBpm:document.querySelector('#targetBpm'),pitch:document.querySelector('#pitch'),pitchValue:document.querySelector('#pitchValue'),loopBars:document.querySelector('#loopBars'),quantise:document.querySelector('#quantise'),metronome:document.querySelector('#metronome'),countIn:document.querySelector('#countIn')};
+const els={pads:document.querySelector('#pads'),url:document.querySelector('#youtubeUrl'),loadYoutube:document.querySelector('#loadYoutube'),file:document.querySelector('#audioFile'),message:document.querySelector('#message'),title:document.querySelector('#trackTitle'),duration:document.querySelector('#duration'),waveform:document.querySelector('#waveform'),selectedInfo:document.querySelector('#selectedInfo'),editPad:document.querySelector('#editPad'),editTime:document.querySelector('#editTime'),master:document.querySelector('#masterVolume'),modeBtn:document.querySelector('#modeBtn'),chokeBtn:document.querySelector('#chokeBtn'),stopAll:document.querySelector('#stopAll'),resetSlice:document.querySelector('#resetSlice'),audioState:document.querySelector('#audioState'),autoChop:document.querySelector('#autoChop'),equalChop:document.querySelector('#equalChop'),recordLayer:document.querySelector('#recordLayer'),stopRecord:document.querySelector('#stopRecord'),playLayers:document.querySelector('#playLayers'),stopLayers:document.querySelector('#stopLayers'),exportWav:document.querySelector('#exportWav'),layers:document.querySelector('#layers'),recordStatus:document.querySelector('#recordStatus'),recordClock:document.querySelector('#recordClock'),videoMode:document.querySelector('#videoMode'),videoPanel:document.querySelector('#videoPanel'),videoStatus:document.querySelector('#videoStatus'),youtubePlayer:document.querySelector('#youtubePlayer'),localVideo:document.querySelector('#localVideo'),videoPlaceholder:document.querySelector('#videoPlaceholder'),captureYoutube:document.querySelector('#captureYoutube'),stopCapture:document.querySelector('#stopCapture'),sourceBpm:document.querySelector('#sourceBpm'),targetBpm:document.querySelector('#targetBpm'),pitch:document.querySelector('#pitch'),pitchValue:document.querySelector('#pitchValue'),sourceInfo:document.querySelector('#sourceInfo'),loopBars:document.querySelector('#loopBars'),quantise:document.querySelector('#quantise'),metronome:document.querySelector('#metronome'),countIn:document.querySelector('#countIn')};
 let ctx,masterGain,buffer=null,pads=[],selectedPad=0,mode='oneshot',monoChoke=false;
 let detectedSourceBpm=120;
+let sampleSources=new Map(),activeSourceId=null,sourceSequence=0;
 let activeSources=new Map(),scheduledSources=[],dragMarker=-1;
 let layers=[],recording=false,currentLayer=null,recordStart=0,recordTimer=null,mixStart=0,mixTimer=null;
 let metronomeOn=false,countInOn=true,loopScheduler=null,nextLoopAt=0,transportStart=0,transportExcludeCurrent=false,transportMode=null,metroNodes=[],countInTimer=null;
@@ -24,6 +25,11 @@ function updateTempoUi(){
   if(!els.pitchValue)return;
   const st=Number(els.pitch.value)||0;
   els.pitchValue.textContent=(st>0?'+':'')+st+' st';
+}
+function activeSource(){return activeSourceId?sampleSources.get(activeSourceId):null}
+function sourceForEvent(e){return (e?.sourceId&&sampleSources.get(e.sourceId))||activeSource()||null}
+function updateSourceInfo(){
+  if(els.sourceInfo)els.sourceInfo.textContent=sampleSources.size+' SOURCE'+(sampleSources.size===1?'':'S')+' LOADED'
 }
 function beatDuration(){return 60/clampBpm(els.targetBpm?.value||120)}
 function loopBars(){return Math.max(1,Number(els.loopBars?.value)||4)}
@@ -152,6 +158,9 @@ async function startBrowserCapture(){
   if(!url||!youtubeIdFromUrl(url))return setMessage('Paste a valid YouTube URL first.',true);
   if(!navigator.mediaDevices?.getDisplayMedia)return setMessage('This browser does not support tab-audio capture.',true);
   if(captureRecorder)return;
+  if(recording)stopRecording();
+  else stopScheduled();
+  stopAllLiveSources();
 
   try{
     setVideoMode(true);
@@ -245,8 +254,13 @@ async function finishBrowserCapture(){
     const type=recorder?.mimeType||'audio/webm';
     const blob=new Blob(chunks,{type});
     const id=youtubeIdFromUrl(els.url.value.trim());
-    await decodeArrayBuffer(await blob.arrayBuffer(),id?'Captured YouTube '+id:'Captured YouTube');
-    setMessage('Browser capture loaded. Chop markers are ready.');
+    let capturedTitle=id?'Captured YouTube '+id:'Captured YouTube';
+    try{
+      const videoData=youtubePlayer?.getVideoData?.();
+      if(videoData?.title)capturedTitle=videoData.title
+    }catch{}
+    await decodeArrayBuffer(await blob.arrayBuffer(),capturedTitle);
+    setMessage('New source loaded. Existing recorded layers were kept.');
   }catch(err){
     console.error(err);
     els.audioState.textContent=buffer?'READY':'NO SAMPLE';
@@ -257,7 +271,39 @@ async function finishBrowserCapture(){
 }
 
 function createPads(){els.pads.innerHTML='';keys.forEach((key,index)=>{const btn=document.createElement('button');btn.className='pad';btn.dataset.index=index;btn.innerHTML='<span class="num">PAD '+String(index+1).padStart(2,'0')+'</span><span class="key">'+key.toUpperCase()+'</span><span class="slice">EMPTY</span>';btn.addEventListener('pointerdown',e=>{e.preventDefault();selectPad(index);playPad(index,true)});btn.addEventListener('pointerup',()=>{if(mode==='gate')stopPad(index)});btn.addEventListener('pointerleave',()=>{if(mode==='gate')stopPad(index)});els.pads.appendChild(btn)});selectPad(0)}
-async function decodeArrayBuffer(ab,title='Sample'){ensureAudio();setMessage('Decoding audio…');try{buffer=await ctx.decodeAudioData(ab.slice(0));detectedSourceBpm=detectBpm(buffer);if(els.sourceBpm)els.sourceBpm.value=Math.round(detectedSourceBpm);if(els.targetBpm)els.targetBpm.value=Math.round(detectedSourceBpm);if(els.pitch)els.pitch.value=0;updateTempoUi();buildSlices();layers=[];renderLayers();els.title.textContent=title.toUpperCase();els.duration.textContent=formatTime(buffer.duration);els.audioState.textContent='READY';drawWaveform();updatePads();selectPad(0);setMessage('Ready. Estimated '+Math.round(detectedSourceBpm)+' BPM. Pads are polyphonic.')}catch(err){console.error(err);setMessage('This audio format could not be decoded by the browser.',true)}}
+async function decodeArrayBuffer(ab,title='Sample'){
+  ensureAudio();setMessage('Decoding audio…');
+  try{
+    const decoded=await ctx.decodeAudioData(ab.slice(0));
+    buffer=decoded;
+    detectedSourceBpm=detectBpm(buffer);
+    if(els.sourceBpm)els.sourceBpm.value=Math.round(detectedSourceBpm);
+    if(els.targetBpm)els.targetBpm.value=Math.round(detectedSourceBpm);
+    if(els.pitch)els.pitch.value=0;
+    updateTempoUi();
+    buildSlices();
+
+    const sourceId='source-'+(++sourceSequence);
+    sampleSources.set(sourceId,{
+      id:sourceId,
+      title,
+      buffer:decoded,
+      bpm:detectedSourceBpm,
+      createdAt:Date.now()
+    });
+    activeSourceId=sourceId;
+    updateSourceInfo();
+    renderLayers();
+
+    els.title.textContent=title.toUpperCase();
+    els.duration.textContent=formatTime(buffer.duration);
+    els.audioState.textContent='READY';
+    drawWaveform();updatePads();selectPad(0);
+    setMessage('Ready. Source '+sampleSources.size+' loaded; '+layers.length+' recorded layer'+(layers.length===1?'':'s')+' preserved.')
+  }catch(err){
+    console.error(err);setMessage('This audio format could not be decoded by the browser.',true)
+  }
+}
 function buildSlices(){applyBoundaries(Array.from({length:17},(_,i)=>buffer.duration*i/16),true)}
 function applyBoundaries(boundaries,setDefaults=false){pads=Array.from({length:16},(_,i)=>{const old=pads[i]||{};const start=boundaries[i],end=boundaries[i+1];return{defaultStart:setDefaults?start:(old.defaultStart??start),defaultEnd:setDefaults?end:(old.defaultEnd??end),start,end}});updatePads();updateEditInfo();drawWaveform()}
 function transientChop(){
@@ -280,7 +326,7 @@ function makeSource(index,destination=masterGain,when=0,durationOverride=null,ra
 function playPad(index,capture=false){if(!buffer||!pads[index])return;ensureAudio();if(monoChoke)stopAllLiveSources();const slice=pads[index],duration=Math.max(.02,slice.end-slice.start),rate=getPlaybackRate(),source=makeSource(index,masterGain,0,duration,rate);if(!source)return;let group=activeSources.get(index);if(!group){group=new Set();activeSources.set(index,group)}group.add(source);source.onended=()=>{const g=activeSources.get(index);if(g){g.delete(source);if(!g.size){activeSources.delete(index);setHit(index,false)}}};setHit(index,true);triggerVideo(index,duration/rate);if(capture&&recording&&currentLayer&&ctx.currentTime>=recordStart){
   const rawBeat=(ctx.currentTime-recordStart)/beatDuration();
   const beat=quantiseBeat(rawBeat);
-  currentLayer.events.push({pad:index,beat,time:beat*beatDuration(),duration,start:slice.start,rate})
+  currentLayer.events.push({pad:index,beat,time:beat*beatDuration(),duration,start:slice.start,rate,sourceId:activeSourceId})
 }}
 function stopPad(index){const group=activeSources.get(index);if(!group)return;for(const source of group){try{source.stop()}catch{}}activeSources.delete(index);setHit(index,false)}
 function stopAllLiveSources(){for(const[index,group]of activeSources){for(const source of group){try{source.stop()}catch{}}setHit(index,false)}activeSources.clear()}
@@ -322,10 +368,11 @@ function scheduleLayerCycle(cycleStart,excludeCurrent=false){
   for(const layer of layers){
     if(layer.muted||(excludeCurrent&&layer===currentLayer))continue;
     for(const e of layer.events){
-      const p=pads[e.pad];if(!p)continue;
+      const src=sourceForEvent(e);
+      if(!src?.buffer)continue;
       const s=ctx.createBufferSource();
-      s.buffer=buffer;s.playbackRate.value=e.rate||1;s.connect(masterGain);
-      s.start(cycleStart+eventTime(e),e.start??p.start,e.duration);
+      s.buffer=src.buffer;s.playbackRate.value=e.rate||1;s.connect(masterGain);
+      s.start(cycleStart+eventTime(e),e.start??0,e.duration);
       scheduledSources.push(s)
     }
   }
@@ -358,7 +405,7 @@ function startRecording(){
   if(!buffer)return setMessage('Capture a sample first.',true);
   if(recording)return;
   ensureAudio();stopScheduled();
-  currentLayer={id:Date.now(),name:'Layer '+(layers.length+1),muted:false,events:[]};
+  currentLayer={id:Date.now(),name:'Layer '+(layers.length+1),muted:false,sourceId:activeSourceId,sourceTitle:activeSource()?.title||'Unknown source',events:[]};
   layers.push(currentLayer);
   const prep=ctx.currentTime+.08;
   recordStart=prep+(countInOn?4*beatDuration():0);
@@ -411,10 +458,10 @@ function playMix(){
     els.recordClock.textContent=formatClock(pos)
   },50)
 }
-function renderLayers(){els.layers.innerHTML='';if(!layers.length){els.layers.innerHTML='<div class="empty-layer">No recorded layers yet.</div>';return}layers.forEach(layer=>{const row=document.createElement('div');row.className='layer'+(layer.muted?' muted':'');row.innerHTML='<div class="layer-meta"><span class="layer-name">'+layer.name+'</span><span class="layer-events">'+layer.events.length+' hits</span></div><button data-action="mute">'+(layer.muted?'UNMUTE':'MUTE')+'</button><button data-action="solo">SOLO</button><button data-action="delete">DELETE</button>';row.querySelector('[data-action="mute"]').onclick=()=>{layer.muted=!layer.muted;renderLayers()};row.querySelector('[data-action="solo"]').onclick=()=>{layers.forEach(l=>l.muted=l!==layer);renderLayers()};row.querySelector('[data-action="delete"]').onclick=()=>{layers=layers.filter(l=>l!==layer);renderLayers();els.recordClock.textContent=formatClock(mixDuration())};els.layers.appendChild(row)})}
+function renderLayers(){els.layers.innerHTML='';if(!layers.length){els.layers.innerHTML='<div class="empty-layer">No recorded layers yet.</div>';return}layers.forEach(layer=>{const row=document.createElement('div');row.className='layer'+(layer.muted?' muted':'');row.innerHTML='<div class="layer-meta"><span class="layer-name">'+layer.name+'</span><span class="layer-source">'+(layer.sourceTitle||'Sample source')+'</span><span class="layer-events">'+layer.events.length+' hits</span></div><button data-action="mute">'+(layer.muted?'UNMUTE':'MUTE')+'</button><button data-action="solo">SOLO</button><button data-action="delete">DELETE</button>';row.querySelector('[data-action="mute"]').onclick=()=>{layer.muted=!layer.muted;renderLayers()};row.querySelector('[data-action="solo"]').onclick=()=>{layers.forEach(l=>l.muted=l!==layer);renderLayers()};row.querySelector('[data-action="delete"]').onclick=()=>{layers=layers.filter(l=>l!==layer);renderLayers();els.recordClock.textContent=formatClock(mixDuration())};els.layers.appendChild(row)})}
 
 async function exportWav(){if(!buffer||!layers.some(l=>!l.muted&&l.events.length))return setMessage('Nothing recorded to export.',true);const duration=loopDuration(),sr=buffer.sampleRate,offline=new OfflineAudioContext(2,Math.ceil(duration*sr),sr),gain=offline.createGain();gain.gain.value=Number(els.master.value);gain.connect(offline.destination);for(const layer of layers){if(layer.muted)continue;for(const e of layer.events)makeSourceOffline(offline,gain,e)}setMessage('Rendering '+loopBars()+'-bar loop WAV…');try{const rendered=await offline.startRendering(),wav=audioBufferToWav(rendered),blob=new Blob([wav],{type:'audio/wav'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='sample-loop-'+loopBars()+'bar-'+Math.round(clampBpm(els.targetBpm.value))+'bpm-'+new Date().toISOString().replace(/[:.]/g,'-')+'.wav';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);setMessage('Loop WAV exported.')}catch(err){console.error(err);setMessage('Could not render WAV.',true)}}
-function makeSourceOffline(offline,dest,e){const p=pads[e.pad];if(!p)return;const s=offline.createBufferSource();s.buffer=buffer;s.playbackRate.value=e.rate||1;s.connect(dest);s.start(eventTime(e),e.start??p.start,Math.max(.02,e.duration))}
+function makeSourceOffline(offline,dest,e){const src=sourceForEvent(e);if(!src?.buffer)return;const s=offline.createBufferSource();s.buffer=src.buffer;s.playbackRate.value=e.rate||1;s.connect(dest);s.start(eventTime(e),e.start??0,Math.max(.02,e.duration))}
 function audioBufferToWav(b){const channels=b.numberOfChannels,samples=b.length,bytes=44+samples*channels*2,ab=new ArrayBuffer(bytes),v=new DataView(ab);let o=0;const str=s=>{for(let i=0;i<s.length;i++)v.setUint8(o++,s.charCodeAt(i))},u32=n=>{v.setUint32(o,n,true);o+=4},u16=n=>{v.setUint16(o,n,true);o+=2};str('RIFF');u32(bytes-8);str('WAVE');str('fmt ');u32(16);u16(1);u16(channels);u32(b.sampleRate);u32(b.sampleRate*channels*2);u16(channels*2);u16(16);str('data');u32(samples*channels*2);const data=Array.from({length:channels},(_,c)=>b.getChannelData(c));for(let i=0;i<samples;i++)for(let c=0;c<channels;c++){const x=Math.max(-1,Math.min(1,data[c][i]));v.setInt16(o,x<0?x*32768:x*32767,true);o+=2}return ab}
 
 async function loadYouTube(){const url=els.url.value.trim();if(!url)return setMessage('Paste a YouTube URL first.',true);if(!youtubeIdFromUrl(url))return setMessage('Paste a valid YouTube URL first.',true);prepareYoutubeVideo(url).catch(err=>console.warn('Video preview unavailable',err));ensureAudio();stopAllLiveSources();stopScheduled();els.loadYoutube.disabled=true;els.audioState.textContent='LOADING';setMessage('Fetching the YouTube audio stream…');try{const res=await fetch(API_BASE+'/api/youtube',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url})});if(!res.ok){const body=await res.json().catch(()=>({}));throw new Error(body.error||'YouTube import failed.')}const title=res.headers.get('X-Track-Title')||'YouTube sample',blob=await res.blob();await decodeArrayBuffer(await blob.arrayBuffer(),title)}catch(err){console.error(err);els.audioState.textContent=buffer?'READY':'NO SAMPLE';setMessage(err.message||'Could not load that YouTube video.',true)}finally{els.loadYoutube.disabled=false}}
@@ -432,4 +479,4 @@ els.recordLayer.addEventListener('click',startRecording);els.stopRecord.addEvent
 const down=new Set();window.addEventListener('keydown',e=>{const key=e.key.toLowerCase(),index=keys.indexOf(key);if(index<0||e.repeat||down.has(key))return;if(['input','textarea'].includes(document.activeElement?.tagName?.toLowerCase()))return;e.preventDefault();down.add(key);selectPad(index);playPad(index,true)});window.addEventListener('keyup',e=>{const key=e.key.toLowerCase(),index=keys.indexOf(key);down.delete(key);if(index>=0&&mode==='gate')stopPad(index)});window.addEventListener('blur',()=>{down.clear();if(mode==='gate')stopAllLiveSources()});els.waveform.addEventListener('pointerdown',e=>{if(!buffer)return;const r=els.waveform.getBoundingClientRect(),x=(e.clientX-r.left)/r.width*buffer.duration;let nearest=-1,best=Infinity;for(let i=1;i<16;i++){const d=Math.abs(pads[i].start-x);if(d<best){best=d;nearest=i}}if(best<buffer.duration*.035){dragMarker=nearest;els.waveform.setPointerCapture?.(e.pointerId)}});
 els.waveform.addEventListener('pointermove',e=>{if(dragMarker<1||!buffer)return;const r=els.waveform.getBoundingClientRect(),t=Math.max(pads[dragMarker-1].start+.02,Math.min(pads[dragMarker].end-.02,(e.clientX-r.left)/r.width*buffer.duration));pads[dragMarker-1].end=t;pads[dragMarker].start=t;updatePads();updateEditInfo();drawWaveform()});
 const endDrag=()=>{dragMarker=-1};els.waveform.addEventListener('pointerup',endDrag);els.waveform.addEventListener('pointercancel',endDrag);
-window.addEventListener('resize',drawWaveform);setVideoMode(false);updateGrooveUi();createPads();
+window.addEventListener('resize',drawWaveform);setVideoMode(false);updateGrooveUi();updateSourceInfo();createPads();
