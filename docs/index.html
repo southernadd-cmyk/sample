@@ -4,15 +4,18 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Sample — MPC-style browser sampler</title>
-  <link rel="stylesheet" href="style.css?v=20260929-1905">
+  <title>MPCTube — YouTube MPC Sampler</title>
+  <link rel="stylesheet" href="style.css?v=20260929-1915">
 </head>
 <body>
   <main class="shell">
     <header class="topbar">
-      <div>
-        <div class="eyebrow">SAMPLE / 16 PAD CHOPPER</div>
-        <h1>Browser MPC</h1>
+      <div class="brand">
+        <img src="mpctube-logo.svg" alt="MPCTube" class="brand-logo">
+        <div class="brand-copy">
+          <div class="eyebrow">YOUTUBE / 16 PAD CHOPPER</div>
+          <div class="brand-tagline">Capture. Chop. Layer. Loop.</div>
+        </div>
       </div>
       <div id="audioState" class="status">NO SAMPLE</div>
     </header>
@@ -56,6 +59,16 @@
             <span id="selectedInfo">PAD 01</span>
           </div>
         </div>
+
+        <section class="sources-panel">
+          <div class="sources-head">
+            <span class="section-label">SOURCES</span>
+            <span id="sourcesSummary">NO SOURCES YET</span>
+          </div>
+          <div id="sourcesList" class="sources-list">
+            <div class="sources-empty">Captured YouTube sources will appear here.</div>
+          </div>
+        </section>
 
         <div class="controls">
           <label>MASTER<input id="masterVolume" type="range" min="0" max="1.2" value="0.9" step="0.01"></label>
@@ -128,7 +141,7 @@
 
     <footer>Keyboard: <strong>1 2 3 4 / Q W E R / A S D F / Z X C V</strong></footer>
   </main>
-  <script src="config.js?v=20260929-1905"></script>
-  <script src="app.js?v=20260929-1905"></script>
+  <script src="config.js?v=20260929-1915"></script>
+  <script src="app.js?v=20260929-1915"></script>
 </body>
 </html>
