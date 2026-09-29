@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256"><rect width="256" height="256" rx="48" fill="#101310"/><defs>
+  <linearGradient id="lime" x1="0" x2="1"><stop stop-color="#d9ff39"/><stop offset="1" stop-color="#9cff16"/></linearGradient>
+  <linearGradient id="amber" x1="0" x2="1"><stop stop-color="#ffd13d"/><stop offset="1" stop-color="#ff9f1a"/></linearGradient>
+  <linearGradient id="edge" x1="0" x2="1"><stop stop-color="#d8ff46"/><stop offset=".65" stop-color="#b8ff2f"/><stop offset="1" stop-color="#ffb32a"/></linearGradient>
+</defs><g transform="translate(0 38)"><g transform="translate(8 18)">
+  <path d="M18 18Q18 6 32 6H156Q166 6 175 13L224 51Q236 60 236 72Q236 84 224 93L175 131Q166 138 156 138H32Q18 138 18 124Z" fill="#101310" stroke="url(#edge)" stroke-width="6"/>
+  <g fill="#4b504b">
+    <rect x="34" y="25" width="38" height="38" rx="6"/><rect x="79" y="25" width="38" height="38" rx="6"/><rect x="124" y="25" width="38" height="38" rx="6"/>
+    <rect x="34" y="70" width="38" height="38" rx="6"/><rect x="79" y="70" width="38" height="38" rx="6"/><rect x="124" y="70" width="38" height="38" rx="6"/>
+    <rect x="34" y="115" width="38" height="10" rx="5"/><rect x="79" y="115" width="38" height="10" rx="5"/><rect x="124" y="115" width="38" height="10" rx="5"/>
+  </g>
+  <rect x="34" y="25" width="38" height="38" rx="6" fill="url(#lime)"/>
+  <rect x="79" y="70" width="38" height="38" rx="6" fill="url(#amber)"/>
+  <rect x="124" y="115" width="38" height="10" rx="5" fill="url(#lime)"/>
+  <g stroke-linecap="round" stroke-width="11">
+    <path d="M184 39v66" stroke="#bfff28"/>
+    <path d="M202 50v44" stroke="#d8ff2f"/>
+    <path d="M218 62v20" stroke="#ffbf2f"/>
+  </g>
+</g>
+</g></svg>

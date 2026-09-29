@@ -70,3 +70,5 @@ body{margin:0;background:radial-gradient(circle at 30% 0,#252a25 0,#101210 48%,#
 @media(max-width:700px){.project-head{align-items:flex-start;flex-direction:column}.project-hint{text-align:left}.project-row,.project-load-row{grid-template-columns:1fr}.project-row button{width:100%}}
 
 .clock.counting{font-size:44px;line-height:1;color:var(--lime);font-weight:900;min-width:100px;text-align:center}
+
+.capture-threshold{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px;font-size:11px;color:var(--muted)}.capture-threshold input{width:75px;padding:8px}

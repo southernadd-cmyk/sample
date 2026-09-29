@@ -5,7 +5,30 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>MPCTube — YouTube MPC Sampler</title>
-  <link rel="stylesheet" href="style.css?v=20260929-voice-countin">
+  <meta name="description" content="Turn YouTube samples into beats with MPCTube. Capture audio, chop it across 16 pads, record layered loops and export your mix as WAV in your browser.">
+  <meta name="theme-color" content="#101310">
+  <link rel="canonical" href="https://southernadd-cmyk.github.io/sample/">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="favicon.ico" sizes="16x16 32x32 48x48">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png" sizes="180x180">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="MPCTube">
+  <meta property="og:title" content="MPCTube — Capture. Chop. Layer. Loop.">
+  <meta property="og:description" content="Turn YouTube samples into beats. Chop across 16 pads, build layered loops and export your mix as WAV — all in your browser.">
+  <meta property="og:url" content="https://southernadd-cmyk.github.io/sample/">
+  <meta property="og:image" content="https://southernadd-cmyk.github.io/sample/mpctube-social.png">
+  <meta property="og:image:type" content="image/png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="MPCTube pad and waveform logo. Capture. Chop. Layer. Loop. Turn YouTube samples into beats and export as WAV.">
+  <meta property="og:locale" content="en_GB">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="MPCTube — Capture. Chop. Layer. Loop.">
+  <meta name="twitter:description" content="Turn YouTube samples into beats. Capture, chop, layer and export your loop as WAV in your browser.">
+  <meta name="twitter:image" content="https://southernadd-cmyk.github.io/sample/mpctube-social.png">
+  <meta name="twitter:image:alt" content="MPCTube — Capture. Chop. Layer. Loop.">
+
+  <link rel="stylesheet" href="style.css?v=20260929-audio-start">
 </head>
 <body>
   <main class="shell">
@@ -30,6 +53,10 @@
       <div class="capture-row">
         <span class="hint">Choose <strong>This Tab</strong> in Chrome and enable tab audio. Let the section you want play, then stop capture. Everything stays in your browser.</span>
       </div>
+      <label class="capture-threshold" for="captureThreshold">AUDIO START THRESHOLD
+        <input id="captureThreshold" type="number" min="-72" max="-12" step="3" value="-48"> dB
+        <span class="hint">Waits for sound and removes the silent lead-in. Lower for quiet sources; raise to ignore background noise.</span>
+      </label>
       <div id="message" class="message" aria-live="polite"></div>
     </section>
 
@@ -185,6 +212,6 @@
     <footer>Keyboard pads: <strong>1 2 3 4 / Q W E R / A S D F / Z X C V</strong> &nbsp;•&nbsp; Record/Stop: <strong>SHIFT + R</strong> &nbsp;•&nbsp; MIDI: <strong>NOTES 36–51</strong> &nbsp;•&nbsp; Save: <strong>CTRL/CMD + S</strong></footer>
   </main>
   <script src="config.js?v=20260929-1915"></script>
-  <script src="app.js?v=20260929-voice-countin"></script>
+  <script src="app.js?v=20260929-audio-start"></script>
 </body>
 </html>

@@ -9,6 +9,30 @@ let layers=[],recording=false,currentLayer=null,recordStart=0,recordTimer=null,m
 let metronomeOn=false,countInOn=true,loopScheduler=null,nextLoopAt=0,transportStart=0,transportExcludeCurrent=false,transportMode=null,metroNodes=[],countInTimer=null;
 let videoMode=false,videoKind=null,youtubeVideoId=null,youtubePlayer=null,youtubeReady=false,videoStopTimer=null,localVideoUrl=null;
 let captureRecorder=null,captureStream=null,captureChunks=[],captureTimer=null,captureStopping=false;
+let captureMonitor=null,captureInput=null,captureAnalyser=null,captureThresholdDb=-48,captureVideoOffset=0;
+
+function clearCaptureMonitor(){
+  if(captureMonitor){clearInterval(captureMonitor);captureMonitor=null}
+  captureInput?.disconnect();captureInput=null;captureAnalyser=null
+}
+function trimCaptureLeadIn(audio,thresholdDb){
+  const threshold=Math.pow(10,thresholdDb/20),windowSize=Math.max(1,Math.round(audio.sampleRate*.01));
+  const channels=Array.from({length:audio.numberOfChannels},(_,i)=>audio.getChannelData(i));
+  let onset=-1;
+  for(let start=0;start<audio.length;start+=windowSize){
+    const end=Math.min(audio.length,start+windowSize);
+    if(channels.some(data=>{
+      let energy=0;for(let i=start;i<end;i++)energy+=data[i]*data[i];
+      return Math.sqrt(energy/(end-start))>=threshold
+    })){onset=start;break}
+  }
+  if(onset<0)throw new Error('No sound crossed the start threshold. Lower the threshold or check that tab audio is shared.');
+  const start=Math.max(0,onset-Math.round(audio.sampleRate*.03));
+  if(!start)return {audio,trimmedSeconds:0};
+  const trimmed=ctx.createBuffer(audio.numberOfChannels,audio.length-start,audio.sampleRate);
+  channels.forEach((data,i)=>trimmed.copyToChannel(data.subarray(start),i));
+  return {audio:trimmed,trimmedSeconds:start/audio.sampleRate}
+}
 let midiAccess=null,midiInput=null,midiLearning=false,midiLearnPad=0,midiHeld=new Map();
 let midiMap=new Map(Array.from({length:16},(_,i)=>[36+i,i]));
 let projectDbPromise=null,currentProjectName='',projectDirty=false;
@@ -239,6 +263,7 @@ function projectSnapshot(name){
       pads:clonePads(src.pads||[]),
       url:src.url||'',
       youtubeId:src.youtubeId||null,
+      videoOffset:src.videoOffset||0,
       createdAt:src.createdAt||Date.now(),
       audio:audioBufferSnapshot(src.buffer)
     }))
@@ -309,7 +334,7 @@ async function loadProjectLocal(){
       restoredSources.set(src.id,{
         id:src.id,title:src.title,bpm:src.bpm,pitch:src.pitch,
         pads:clonePads(src.pads||[]),url:src.url||'',youtubeId:src.youtubeId||null,
-        createdAt:src.createdAt||Date.now(),buffer:restoreAudioBuffer(src.audio)
+        videoOffset:src.videoOffset||0,createdAt:src.createdAt||Date.now(),buffer:restoreAudioBuffer(src.audio)
       })
     }
     sampleSources=restoredSources;
@@ -552,7 +577,7 @@ function stopVideo(){
 }
 function triggerVideo(index,duration){
   if(!videoMode||!pads[index]||!videoKind)return;
-  const start=pads[index].start;stopVideo();
+  const start=pads[index].start+(activeSource()?.videoOffset||0);stopVideo();
   if(videoKind==='youtube'&&youtubeReady&&youtubePlayer){
     try{youtubePlayer.mute();youtubePlayer.seekTo(start,true);youtubePlayer.playVideo()}catch{}
   }else if(videoKind==='local'){
@@ -608,10 +633,27 @@ async function startBrowserCapture(){
     captureStream.getVideoTracks()[0]?.addEventListener('ended',()=>stopBrowserCapture());
 
     captureRecorder.start(500);
+    ensureAudio();
+    captureThresholdDb=Math.max(-72,Math.min(-12,Number(document.querySelector('#captureThreshold').value)||-48));
+    captureVideoOffset=0;
+    captureInput=ctx.createMediaStreamSource(audioOnly);
+    captureAnalyser=ctx.createAnalyser();captureAnalyser.fftSize=1024;
+    captureInput.connect(captureAnalyser);
+    const samples=new Float32Array(captureAnalyser.fftSize);
+    captureMonitor=setInterval(()=>{
+      captureAnalyser.getFloatTimeDomainData(samples);
+      let energy=0;for(const value of samples)energy+=value*value;
+      if(Math.sqrt(energy/samples.length)>=Math.pow(10,captureThresholdDb/20)){
+        captureVideoOffset=Math.max(0,(youtubePlayer?.getCurrentTime?.()||0)-.03);
+        clearCaptureMonitor();
+        els.audioState.textContent='CAPTURING';
+        setMessage('Sound detected — capturing. Click STOP CAPTURE when you have enough.')
+      }
+    },20);
     els.captureYoutube.disabled=true;
     els.stopCapture.disabled=false;
-    els.audioState.textContent='CAPTURING';
-    setMessage('Capturing YouTube audio in this browser… click STOP CAPTURE when you have enough.');
+    els.audioState.textContent='WAITING FOR AUDIO';
+    setMessage('Waiting for sound above '+captureThresholdDb+' dB. The silent lead-in will be removed automatically.');
 
     if(youtubeReady&&youtubePlayer){
       try{
@@ -624,6 +666,7 @@ async function startBrowserCapture(){
     captureTimer=setTimeout(()=>stopBrowserCapture(),15*60*1000);
   }catch(err){
     console.error(err);
+    clearCaptureMonitor();
     if(captureStream){captureStream.getTracks().forEach(t=>t.stop());captureStream=null}
     captureRecorder=null;
     els.captureYoutube.disabled=false;
@@ -636,6 +679,7 @@ async function startBrowserCapture(){
 function stopBrowserCapture(){
   if(captureStopping)return;
   captureStopping=true;
+  clearCaptureMonitor();
   if(captureTimer){clearTimeout(captureTimer);captureTimer=null}
   if(youtubeReady&&youtubePlayer){try{youtubePlayer.pauseVideo();youtubePlayer.mute()}catch{}}
   if(captureRecorder&&captureRecorder.state!=='inactive'){
@@ -645,6 +689,7 @@ function stopBrowserCapture(){
   }
 }
 async function finishBrowserCapture(){
+  clearCaptureMonitor();
   if(captureTimer){clearTimeout(captureTimer);captureTimer=null}
   const stream=captureStream;
   captureStream=null;
@@ -671,22 +716,23 @@ async function finishBrowserCapture(){
       const videoData=youtubePlayer?.getVideoData?.();
       if(videoData?.title)capturedTitle=videoData.title
     }catch{}
-    await decodeArrayBuffer(await blob.arrayBuffer(),capturedTitle);
-    setMessage('New source loaded. Existing recorded layers were kept.');
+    const removed=await decodeArrayBuffer(await blob.arrayBuffer(),capturedTitle,{thresholdDb:captureThresholdDb,videoOffset:captureVideoOffset});
+    setMessage('New source loaded. Removed '+removed.toFixed(2)+'s of silent lead-in. Existing recorded layers were kept.');
   }catch(err){
     console.error(err);
     els.audioState.textContent=buffer?'READY':'NO SAMPLE';
-    setMessage('Captured audio could not be decoded.',true)
+    setMessage(err.message||'Captured audio could not be decoded.',true)
   }finally{
     captureStopping=false
   }
 }
 
 function createPads(){els.pads.innerHTML='';keys.forEach((key,index)=>{const btn=document.createElement('button');btn.className='pad';btn.dataset.index=index;btn.innerHTML='<span class="num">PAD '+String(index+1).padStart(2,'0')+'</span><span class="key">'+key.toUpperCase()+'</span><span class="slice">EMPTY</span>';btn.addEventListener('pointerdown',e=>{e.preventDefault();selectPad(index);playPad(index,true)});btn.addEventListener('pointerup',()=>{if(mode==='gate')stopPad(index)});btn.addEventListener('pointerleave',()=>{if(mode==='gate')stopPad(index)});els.pads.appendChild(btn)});selectPad(0)}
-async function decodeArrayBuffer(ab,title='Sample'){
+async function decodeArrayBuffer(ab,title='Sample',captureOptions=null){
   ensureAudio();setMessage('Decoding audio…');
   try{
-    const decoded=await ctx.decodeAudioData(ab.slice(0));
+    let decoded=await ctx.decodeAudioData(ab.slice(0)),trimmedSeconds=0;
+    if(captureOptions){const result=trimCaptureLeadIn(decoded,captureOptions.thresholdDb);decoded=result.audio;trimmedSeconds=result.trimmedSeconds}
     buffer=decoded;
     detectedSourceBpm=detectBpm(buffer);
     if(els.sourceBpm)els.sourceBpm.value=Math.round(detectedSourceBpm);
@@ -705,6 +751,7 @@ async function decodeArrayBuffer(ab,title='Sample'){
       pads:clonePads(),
       url:els.url?.value?.trim()||'',
       youtubeId:youtubeIdFromUrl(els.url?.value?.trim()||''),
+      videoOffset:captureOptions?.videoOffset||0,
       createdAt:Date.now()
     });
     activeSourceId=sourceId;
@@ -716,8 +763,10 @@ async function decodeArrayBuffer(ab,title='Sample'){
     els.duration.textContent=formatTime(buffer.duration);
     els.audioState.textContent='READY';
     drawWaveform();updatePads();selectPad(0);
-    setMessage('Ready. Source '+sampleSources.size+' loaded; '+layers.length+' recorded layer'+(layers.length===1?'':'s')+' preserved.')
+    setMessage('Ready. Source '+sampleSources.size+' loaded; '+layers.length+' recorded layer'+(layers.length===1?'':'s')+' preserved.');
+    return trimmedSeconds
   }catch(err){
+    if(captureOptions)throw err;
     console.error(err);setMessage('This audio format could not be decoded by the browser.',true)
   }
 }
