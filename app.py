@@ -1,4 +1,5 @@
 from flask import Flask, Response, jsonify, request, send_from_directory
+import os
 import requests
 import yt_dlp
 from urllib.parse import urlparse
@@ -30,6 +31,8 @@ def youtube_audio():
     if not is_youtube_url(url):
         return jsonify(error="Enter a valid YouTube URL."), 400
 
+    pot_provider_url = os.getenv("POT_PROVIDER_URL", "").strip()
+
     ydl_opts = {
         "quiet": True,
         "no_warnings": True,
@@ -37,7 +40,20 @@ def youtube_audio():
         "format": "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best",
         "skip_download": True,
         "socket_timeout": 20,
+        "extractor_args": {
+            "youtube": {
+                "player_client": ["mweb"],
+            },
+        },
     }
+
+    # Railway/datacentre IPs are frequently challenged by YouTube. When configured,
+    # bgutil supplies fresh Proof-of-Origin tokens to yt-dlp without storing a user's
+    # personal YouTube cookies on the server.
+    if pot_provider_url:
+        ydl_opts["extractor_args"]["youtubepot-bgutilhttp"] = {
+            "base_url": [pot_provider_url],
+        }
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -73,7 +89,13 @@ def youtube_audio():
         return response
 
     except yt_dlp.utils.DownloadError as exc:
-        return jsonify(error=f"YouTube import failed: {exc}"), 502
+        message = str(exc)
+        if "confirm you’re not a bot" in message.lower() or "confirm you're not a bot" in message.lower():
+            return jsonify(
+                error="YouTube is still challenging the server connection. "
+                      "Try the same URL again once; if it persists, use a local audio file."
+            ), 502
+        return jsonify(error=f"YouTube import failed: {message}"), 502
     except requests.RequestException:
         return jsonify(error="YouTube audio stream could not be downloaded."), 502
     except Exception as exc:
