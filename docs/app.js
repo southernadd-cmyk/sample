@@ -1,10 +1,11 @@
 const API_BASE=(window.SAMPLER_API_BASE || 'https://sample-production-df5c.up.railway.app').replace(/\/$/, '');
 const keys=['1','2','3','4','q','w','e','r','a','s','d','f','z','x','c','v'];
-const els={pads:document.querySelector('#pads'),url:document.querySelector('#youtubeUrl'),loadYoutube:document.querySelector('#loadYoutube'),file:document.querySelector('#audioFile'),message:document.querySelector('#message'),title:document.querySelector('#trackTitle'),duration:document.querySelector('#duration'),waveform:document.querySelector('#waveform'),selectedInfo:document.querySelector('#selectedInfo'),editPad:document.querySelector('#editPad'),editTime:document.querySelector('#editTime'),master:document.querySelector('#masterVolume'),modeBtn:document.querySelector('#modeBtn'),chokeBtn:document.querySelector('#chokeBtn'),stopAll:document.querySelector('#stopAll'),resetSlice:document.querySelector('#resetSlice'),audioState:document.querySelector('#audioState'),autoChop:document.querySelector('#autoChop'),equalChop:document.querySelector('#equalChop'),recordLayer:document.querySelector('#recordLayer'),stopRecord:document.querySelector('#stopRecord'),playLayers:document.querySelector('#playLayers'),stopLayers:document.querySelector('#stopLayers'),exportWav:document.querySelector('#exportWav'),layers:document.querySelector('#layers'),recordStatus:document.querySelector('#recordStatus'),recordClock:document.querySelector('#recordClock'),videoMode:document.querySelector('#videoMode'),videoPanel:document.querySelector('#videoPanel'),videoStatus:document.querySelector('#videoStatus'),youtubePlayer:document.querySelector('#youtubePlayer'),localVideo:document.querySelector('#localVideo'),videoPlaceholder:document.querySelector('#videoPlaceholder'),captureYoutube:document.querySelector('#captureYoutube'),stopCapture:document.querySelector('#stopCapture'),sourceBpm:document.querySelector('#sourceBpm'),targetBpm:document.querySelector('#targetBpm'),pitch:document.querySelector('#pitch'),pitchValue:document.querySelector('#pitchValue')};
+const els={pads:document.querySelector('#pads'),url:document.querySelector('#youtubeUrl'),loadYoutube:document.querySelector('#loadYoutube'),file:document.querySelector('#audioFile'),message:document.querySelector('#message'),title:document.querySelector('#trackTitle'),duration:document.querySelector('#duration'),waveform:document.querySelector('#waveform'),selectedInfo:document.querySelector('#selectedInfo'),editPad:document.querySelector('#editPad'),editTime:document.querySelector('#editTime'),master:document.querySelector('#masterVolume'),modeBtn:document.querySelector('#modeBtn'),chokeBtn:document.querySelector('#chokeBtn'),stopAll:document.querySelector('#stopAll'),resetSlice:document.querySelector('#resetSlice'),audioState:document.querySelector('#audioState'),autoChop:document.querySelector('#autoChop'),equalChop:document.querySelector('#equalChop'),recordLayer:document.querySelector('#recordLayer'),stopRecord:document.querySelector('#stopRecord'),playLayers:document.querySelector('#playLayers'),stopLayers:document.querySelector('#stopLayers'),exportWav:document.querySelector('#exportWav'),layers:document.querySelector('#layers'),recordStatus:document.querySelector('#recordStatus'),recordClock:document.querySelector('#recordClock'),videoMode:document.querySelector('#videoMode'),videoPanel:document.querySelector('#videoPanel'),videoStatus:document.querySelector('#videoStatus'),youtubePlayer:document.querySelector('#youtubePlayer'),localVideo:document.querySelector('#localVideo'),videoPlaceholder:document.querySelector('#videoPlaceholder'),captureYoutube:document.querySelector('#captureYoutube'),stopCapture:document.querySelector('#stopCapture'),sourceBpm:document.querySelector('#sourceBpm'),targetBpm:document.querySelector('#targetBpm'),pitch:document.querySelector('#pitch'),pitchValue:document.querySelector('#pitchValue'),loopBars:document.querySelector('#loopBars'),quantise:document.querySelector('#quantise'),metronome:document.querySelector('#metronome'),countIn:document.querySelector('#countIn')};
 let ctx,masterGain,buffer=null,pads=[],selectedPad=0,mode='oneshot',monoChoke=false;
 let detectedSourceBpm=120;
 let activeSources=new Map(),scheduledSources=[],dragMarker=-1;
 let layers=[],recording=false,currentLayer=null,recordStart=0,recordTimer=null,mixStart=0,mixTimer=null;
+let metronomeOn=false,countInOn=true,loopScheduler=null,nextLoopAt=0,transportStart=0,transportExcludeCurrent=false,transportMode=null,metroNodes=[],countInTimer=null;
 let videoMode=false,videoKind=null,youtubeVideoId=null,youtubePlayer=null,youtubeReady=false,videoStopTimer=null,localVideoUrl=null;
 let captureRecorder=null,captureStream=null,captureChunks=[],captureTimer=null,captureStopping=false;
 
@@ -23,6 +24,25 @@ function updateTempoUi(){
   if(!els.pitchValue)return;
   const st=Number(els.pitch.value)||0;
   els.pitchValue.textContent=(st>0?'+':'')+st+' st';
+}
+function beatDuration(){return 60/clampBpm(els.targetBpm?.value||120)}
+function loopBars(){return Math.max(1,Number(els.loopBars?.value)||4)}
+function loopBeats(){return loopBars()*4}
+function loopDuration(){return loopBeats()*beatDuration()}
+function quantiseBeat(rawBeat){
+  const q=els.quantise?.value||'off';
+  if(q==='off')return ((rawBeat%loopBeats())+loopBeats())%loopBeats();
+  const step=4/Number(q);
+  const snapped=Math.round(rawBeat/step)*step;
+  return ((snapped%loopBeats())+loopBeats())%loopBeats()
+}
+function eventBeat(e){return e.beat!=null?e.beat:(e.time||0)/beatDuration()}
+function eventTime(e){return eventBeat(e)*beatDuration()}
+function updateGrooveUi(){
+  els.metronome?.classList.toggle('active',metronomeOn);
+  if(els.metronome)els.metronome.textContent='METRONOME: '+(metronomeOn?'ON':'OFF');
+  els.countIn?.classList.toggle('active',countInOn);
+  if(els.countIn)els.countIn.textContent=countInOn?'COUNT-IN: 1 BAR':'COUNT-IN: OFF'
 }
 function detectBpm(audioBuffer){
   try{
@@ -257,10 +277,23 @@ function transientChop(){
 }
 
 function makeSource(index,destination=masterGain,when=0,durationOverride=null,rateOverride=null){if(!buffer||!pads[index])return null;const slice=pads[index],duration=Math.max(.02,durationOverride??(slice.end-slice.start)),source=(destination.context||ctx).createBufferSource();source.buffer=buffer;source.playbackRate.value=rateOverride??getPlaybackRate();source.connect(destination);source.start(when,slice.start,duration);return source}
-function playPad(index,capture=false){if(!buffer||!pads[index])return;ensureAudio();if(monoChoke)stopAllLiveSources();const slice=pads[index],duration=Math.max(.02,slice.end-slice.start),rate=getPlaybackRate(),source=makeSource(index,masterGain,0,duration,rate);if(!source)return;let group=activeSources.get(index);if(!group){group=new Set();activeSources.set(index,group)}group.add(source);source.onended=()=>{const g=activeSources.get(index);if(g){g.delete(source);if(!g.size){activeSources.delete(index);setHit(index,false)}}};setHit(index,true);triggerVideo(index,duration/rate);if(capture&&recording&&currentLayer)currentLayer.events.push({pad:index,time:Math.max(0,ctx.currentTime-recordStart),duration,start:slice.start,rate})}
+function playPad(index,capture=false){if(!buffer||!pads[index])return;ensureAudio();if(monoChoke)stopAllLiveSources();const slice=pads[index],duration=Math.max(.02,slice.end-slice.start),rate=getPlaybackRate(),source=makeSource(index,masterGain,0,duration,rate);if(!source)return;let group=activeSources.get(index);if(!group){group=new Set();activeSources.set(index,group)}group.add(source);source.onended=()=>{const g=activeSources.get(index);if(g){g.delete(source);if(!g.size){activeSources.delete(index);setHit(index,false)}}};setHit(index,true);triggerVideo(index,duration/rate);if(capture&&recording&&currentLayer&&ctx.currentTime>=recordStart){
+  const rawBeat=(ctx.currentTime-recordStart)/beatDuration();
+  const beat=quantiseBeat(rawBeat);
+  currentLayer.events.push({pad:index,beat,time:beat*beatDuration(),duration,start:slice.start,rate})
+}}
 function stopPad(index){const group=activeSources.get(index);if(!group)return;for(const source of group){try{source.stop()}catch{}}activeSources.delete(index);setHit(index,false)}
 function stopAllLiveSources(){for(const[index,group]of activeSources){for(const source of group){try{source.stop()}catch{}}setHit(index,false)}activeSources.clear()}
-function stopScheduled(){for(const s of scheduledSources){try{s.stop()}catch{}}scheduledSources=[];if(mixTimer){clearInterval(mixTimer);mixTimer=null}}
+function stopScheduled(){
+  for(const s of scheduledSources){try{s.stop()}catch{}}
+  scheduledSources=[];
+  for(const n of metroNodes){try{n.stop()}catch{}}
+  metroNodes=[];
+  if(loopScheduler){clearInterval(loopScheduler);loopScheduler=null}
+  if(mixTimer){clearInterval(mixTimer);mixTimer=null}
+  if(countInTimer){clearTimeout(countInTimer);countInTimer=null}
+  transportMode=null
+}
 function setHit(i,on){const p=els.pads.children[i];if(p)p.classList.toggle('hit',on)}
 function selectPad(i){selectedPad=i;[...els.pads.children].forEach((p,n)=>p.classList.toggle('selected',n===i));const label='PAD '+String(i+1).padStart(2,'0');els.selectedInfo.textContent=label;els.editPad.textContent=label;updateEditInfo()}
 function updateEditInfo(){const p=pads[selectedPad];els.editTime.textContent=p?p.start.toFixed(2)+'s — '+p.end.toFixed(2)+'s':'0.00s — 0.00s'}
@@ -268,26 +301,135 @@ function updatePads(){[...els.pads.children].forEach((pad,i)=>{const p=pads[i];p
 
 function drawWaveform(){const c=els.waveform,dpr=window.devicePixelRatio||1,r=c.getBoundingClientRect();c.width=Math.max(600,Math.floor(r.width*dpr));c.height=Math.max(180,Math.floor(r.height*dpr));const g=c.getContext('2d'),w=c.width,h=c.height;g.clearRect(0,0,w,h);g.fillStyle='#8cad74';g.fillRect(0,0,w,h);if(!buffer)return;const data=buffer.getChannelData(0),center=h/2,step=Math.max(1,Math.floor(data.length/w));g.strokeStyle='#203219';g.lineWidth=Math.max(1,dpr);g.beginPath();for(let x=0;x<w;x++){let min=1,max=-1,start=x*step,end=Math.min(data.length,start+step);for(let i=start;i<end;i++){const v=data[i];if(v<min)min=v;if(v>max)max=v}g.moveTo(x,center+min*center*.86);g.lineTo(x,center+max*center*.86)}g.stroke();g.strokeStyle='#405b32';for(let i=1;i<16;i++){const x=(pads[i]?.start??(buffer.duration*i/16))/buffer.duration*w;g.beginPath();g.moveTo(x,0);g.lineTo(x,h);g.stroke()}}
 
-function mixDuration(){let end=0;for(const l of layers.filter(x=>!x.muted))for(const e of l.events)end=Math.max(end,e.time+e.duration/Math.max(.01,e.rate||1));return end}
-function scheduleLayers(excludeCurrent=false){ensureAudio();stopScheduled();const start=ctx.currentTime+.03;for(const layer of layers){if(layer.muted||(excludeCurrent&&layer===currentLayer))continue;for(const e of layer.events){const p=pads[e.pad];if(!p)continue;const s=ctx.createBufferSource();s.buffer=buffer;s.playbackRate.value=e.rate||1;s.connect(masterGain);s.start(start+e.time,e.start??p.start,e.duration);scheduledSources.push(s)}}return start}
-function startRecording(){if(!buffer)return setMessage('Load a sample first.',true);if(recording)return;ensureAudio();stopScheduled();currentLayer={id:Date.now(),name:'Layer '+(layers.length+1),muted:false,events:[]};layers.push(currentLayer);recordStart=scheduleLayers(true);recording=true;els.recordLayer.classList.add('active');els.recordStatus.textContent='RECORDING '+currentLayer.name.toUpperCase();recordTimer=setInterval(()=>els.recordClock.textContent=formatClock(ctx.currentTime-recordStart),50);renderLayers();setMessage('Recording new layer. Existing layers are playing underneath it.')}
-function stopRecording(){if(!recording)return;recording=false;els.recordLayer.classList.remove('active');if(recordTimer){clearInterval(recordTimer);recordTimer=null}stopScheduled();const empty=currentLayer&&currentLayer.events.length===0;if(empty)layers=layers.filter(l=>l!==currentLayer);currentLayer=null;els.recordStatus.textContent='READY TO OVERDUB';els.recordClock.textContent=formatClock(mixDuration());renderLayers();setMessage(empty?'Empty layer discarded.':'Layer saved. Record again to overdub another layer.')}
-function playMix(){if(!layers.some(l=>!l.muted&&l.events.length))return setMessage('Record a layer first.',true);if(recording)stopRecording();mixStart=scheduleLayers(false);els.recordStatus.textContent='PLAYING MIX';mixTimer=setInterval(()=>{const t=ctx.currentTime-mixStart,d=mixDuration();els.recordClock.textContent=formatClock(Math.min(t,d));if(t>d+.1){stopScheduled();els.recordStatus.textContent='READY TO OVERDUB'}},50)}
+function mixDuration(){return loopDuration()}
+function scheduleClick(when,accent=false){
+  if(!ctx||when<ctx.currentTime-.02)return;
+  const osc=ctx.createOscillator(),gain=ctx.createGain();
+  osc.frequency.value=accent?1280:900;
+  gain.gain.setValueAtTime(0.0001,when);
+  gain.gain.exponentialRampToValueAtTime(accent?.14:.09,when+.002);
+  gain.gain.exponentialRampToValueAtTime(.0001,when+.045);
+  osc.connect(gain);gain.connect(masterGain);
+  osc.start(when);osc.stop(when+.055);
+  metroNodes.push(osc)
+}
+function scheduleMetronomeCycle(cycleStart){
+  if(!metronomeOn)return;
+  const beat=beatDuration();
+  for(let i=0;i<loopBeats();i++)scheduleClick(cycleStart+i*beat,i%4===0)
+}
+function scheduleLayerCycle(cycleStart,excludeCurrent=false){
+  for(const layer of layers){
+    if(layer.muted||(excludeCurrent&&layer===currentLayer))continue;
+    for(const e of layer.events){
+      const p=pads[e.pad];if(!p)continue;
+      const s=ctx.createBufferSource();
+      s.buffer=buffer;s.playbackRate.value=e.rate||1;s.connect(masterGain);
+      s.start(cycleStart+eventTime(e),e.start??p.start,e.duration);
+      scheduledSources.push(s)
+    }
+  }
+}
+function scheduleLoopCycle(cycleStart,excludeCurrent=false){
+  scheduleLayerCycle(cycleStart,excludeCurrent);
+  scheduleMetronomeCycle(cycleStart)
+}
+function startLoopTransport(startAt,excludeCurrent=false,modeName='play'){
+  ensureAudio();stopScheduled();
+  transportStart=startAt;
+  transportExcludeCurrent=excludeCurrent;
+  transportMode=modeName;
+  nextLoopAt=startAt;
+  const pump=()=>{
+    const horizon=ctx.currentTime+.35;
+    while(nextLoopAt<horizon){
+      scheduleLoopCycle(nextLoopAt,transportExcludeCurrent);
+      nextLoopAt+=loopDuration()
+    }
+  };
+  pump();
+  loopScheduler=setInterval(pump,60)
+}
+function scheduleCountIn(startAt){
+  const beat=beatDuration();
+  for(let i=0;i<4;i++)scheduleClick(startAt+i*beat,i===0)
+}
+function startRecording(){
+  if(!buffer)return setMessage('Capture a sample first.',true);
+  if(recording)return;
+  ensureAudio();stopScheduled();
+  currentLayer={id:Date.now(),name:'Layer '+(layers.length+1),muted:false,events:[]};
+  layers.push(currentLayer);
+  const prep=ctx.currentTime+.08;
+  recordStart=prep+(countInOn?4*beatDuration():0);
+  recording=true;
+  els.recordLayer.classList.add('active');
+  if(countInOn){
+    scheduleCountIn(prep);
+    els.recordStatus.textContent='COUNT-IN';
+    countInTimer=setTimeout(()=>{
+      if(recording)els.recordStatus.textContent='RECORDING '+currentLayer.name.toUpperCase()
+    },Math.max(0,(recordStart-ctx.currentTime)*1000))
+  }else{
+    els.recordStatus.textContent='RECORDING '+currentLayer.name.toUpperCase()
+  }
+  startLoopTransport(recordStart,true,'record');
+  recordTimer=setInterval(()=>{
+    const remaining=recordStart-ctx.currentTime;
+    if(remaining>0){
+      els.recordClock.textContent='-'+formatClock(remaining)
+    }else{
+      const pos=((ctx.currentTime-recordStart)%loopDuration()+loopDuration())%loopDuration();
+      els.recordClock.textContent=formatClock(pos)
+    }
+  },50);
+  renderLayers();
+  setMessage('Loop recording armed. Hits are '+((els.quantise?.value||'off')==='off'?'unquantised':('quantised to 1/'+els.quantise.value))+'.')
+}
+function stopRecording(){
+  if(!recording)return;
+  recording=false;
+  els.recordLayer.classList.remove('active');
+  if(recordTimer){clearInterval(recordTimer);recordTimer=null}
+  stopScheduled();
+  const empty=currentLayer&&currentLayer.events.length===0;
+  if(empty)layers=layers.filter(l=>l!==currentLayer);
+  currentLayer=null;
+  els.recordStatus.textContent='READY TO OVERDUB';
+  els.recordClock.textContent=formatClock(loopDuration());
+  renderLayers();
+  setMessage(empty?'Empty layer discarded.':'Layer saved as a '+loopBars()+'-bar loop.')
+}
+function playMix(){
+  if(!layers.some(l=>!l.muted&&l.events.length))return setMessage('Record a layer first.',true);
+  if(recording)stopRecording();
+  mixStart=ctx.currentTime+.08;
+  startLoopTransport(mixStart,false,'play');
+  els.recordStatus.textContent='LOOPING MIX';
+  mixTimer=setInterval(()=>{
+    const pos=((ctx.currentTime-mixStart)%loopDuration()+loopDuration())%loopDuration();
+    els.recordClock.textContent=formatClock(pos)
+  },50)
+}
 function renderLayers(){els.layers.innerHTML='';if(!layers.length){els.layers.innerHTML='<div class="empty-layer">No recorded layers yet.</div>';return}layers.forEach(layer=>{const row=document.createElement('div');row.className='layer'+(layer.muted?' muted':'');row.innerHTML='<div class="layer-meta"><span class="layer-name">'+layer.name+'</span><span class="layer-events">'+layer.events.length+' hits</span></div><button data-action="mute">'+(layer.muted?'UNMUTE':'MUTE')+'</button><button data-action="solo">SOLO</button><button data-action="delete">DELETE</button>';row.querySelector('[data-action="mute"]').onclick=()=>{layer.muted=!layer.muted;renderLayers()};row.querySelector('[data-action="solo"]').onclick=()=>{layers.forEach(l=>l.muted=l!==layer);renderLayers()};row.querySelector('[data-action="delete"]').onclick=()=>{layers=layers.filter(l=>l!==layer);renderLayers();els.recordClock.textContent=formatClock(mixDuration())};els.layers.appendChild(row)})}
 
-async function exportWav(){if(!buffer||!layers.some(l=>!l.muted&&l.events.length))return setMessage('Nothing recorded to export.',true);const duration=mixDuration()+.15,sr=buffer.sampleRate,offline=new OfflineAudioContext(2,Math.ceil(duration*sr),sr),gain=offline.createGain();gain.gain.value=Number(els.master.value);gain.connect(offline.destination);for(const layer of layers){if(layer.muted)continue;for(const e of layer.events)makeSourceOffline(offline,gain,e)}setMessage('Rendering WAV…');try{const rendered=await offline.startRendering(),wav=audioBufferToWav(rendered),blob=new Blob([wav],{type:'audio/wav'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='sample-performance-'+new Date().toISOString().replace(/[:.]/g,'-')+'.wav';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);setMessage('WAV exported.')}catch(err){console.error(err);setMessage('Could not render WAV.',true)}}
-function makeSourceOffline(offline,dest,e){const p=pads[e.pad];if(!p)return;const s=offline.createBufferSource();s.buffer=buffer;s.playbackRate.value=e.rate||1;s.connect(dest);s.start(e.time,e.start??p.start,Math.max(.02,e.duration))}
+async function exportWav(){if(!buffer||!layers.some(l=>!l.muted&&l.events.length))return setMessage('Nothing recorded to export.',true);const duration=loopDuration(),sr=buffer.sampleRate,offline=new OfflineAudioContext(2,Math.ceil(duration*sr),sr),gain=offline.createGain();gain.gain.value=Number(els.master.value);gain.connect(offline.destination);for(const layer of layers){if(layer.muted)continue;for(const e of layer.events)makeSourceOffline(offline,gain,e)}setMessage('Rendering '+loopBars()+'-bar loop WAV…');try{const rendered=await offline.startRendering(),wav=audioBufferToWav(rendered),blob=new Blob([wav],{type:'audio/wav'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='sample-loop-'+loopBars()+'bar-'+Math.round(clampBpm(els.targetBpm.value))+'bpm-'+new Date().toISOString().replace(/[:.]/g,'-')+'.wav';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);setMessage('Loop WAV exported.')}catch(err){console.error(err);setMessage('Could not render WAV.',true)}}
+function makeSourceOffline(offline,dest,e){const p=pads[e.pad];if(!p)return;const s=offline.createBufferSource();s.buffer=buffer;s.playbackRate.value=e.rate||1;s.connect(dest);s.start(eventTime(e),e.start??p.start,Math.max(.02,e.duration))}
 function audioBufferToWav(b){const channels=b.numberOfChannels,samples=b.length,bytes=44+samples*channels*2,ab=new ArrayBuffer(bytes),v=new DataView(ab);let o=0;const str=s=>{for(let i=0;i<s.length;i++)v.setUint8(o++,s.charCodeAt(i))},u32=n=>{v.setUint32(o,n,true);o+=4},u16=n=>{v.setUint16(o,n,true);o+=2};str('RIFF');u32(bytes-8);str('WAVE');str('fmt ');u32(16);u16(1);u16(channels);u32(b.sampleRate);u32(b.sampleRate*channels*2);u16(channels*2);u16(16);str('data');u32(samples*channels*2);const data=Array.from({length:channels},(_,c)=>b.getChannelData(c));for(let i=0;i<samples;i++)for(let c=0;c<channels;c++){const x=Math.max(-1,Math.min(1,data[c][i]));v.setInt16(o,x<0?x*32768:x*32767,true);o+=2}return ab}
 
 async function loadYouTube(){const url=els.url.value.trim();if(!url)return setMessage('Paste a YouTube URL first.',true);if(!youtubeIdFromUrl(url))return setMessage('Paste a valid YouTube URL first.',true);prepareYoutubeVideo(url).catch(err=>console.warn('Video preview unavailable',err));ensureAudio();stopAllLiveSources();stopScheduled();els.loadYoutube.disabled=true;els.audioState.textContent='LOADING';setMessage('Fetching the YouTube audio stream…');try{const res=await fetch(API_BASE+'/api/youtube',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url})});if(!res.ok){const body=await res.json().catch(()=>({}));throw new Error(body.error||'YouTube import failed.')}const title=res.headers.get('X-Track-Title')||'YouTube sample',blob=await res.blob();await decodeArrayBuffer(await blob.arrayBuffer(),title)}catch(err){console.error(err);els.audioState.textContent=buffer?'READY':'NO SAMPLE';setMessage(err.message||'Could not load that YouTube video.',true)}finally{els.loadYoutube.disabled=false}}
 
 els.captureYoutube.addEventListener('click',startBrowserCapture);els.stopCapture.addEventListener('click',stopBrowserCapture);els.url.addEventListener('keydown',e=>{if(e.key==='Enter')startBrowserCapture()});els.master.addEventListener('input',()=>{if(masterGain)masterGain.gain.value=Number(els.master.value)});els.modeBtn.addEventListener('click',()=>{mode=mode==='oneshot'?'gate':'oneshot';els.modeBtn.textContent='MODE: '+(mode==='oneshot'?'ONE SHOT':'GATE')});els.chokeBtn.addEventListener('click',()=>{monoChoke=!monoChoke;const poly=!monoChoke;els.chokeBtn.classList.toggle('active',poly);els.chokeBtn.setAttribute('aria-pressed',String(poly));els.chokeBtn.textContent='POLY: '+(poly?'ON':'OFF')});els.stopAll.addEventListener('click',()=>{stopAllLiveSources();stopScheduled()});els.resetSlice.addEventListener('click',()=>{const p=pads[selectedPad];if(!p)return;p.start=p.defaultStart;p.end=p.defaultEnd;updatePads();updateEditInfo()});document.querySelectorAll('[data-nudge]').forEach(btn=>btn.addEventListener('click',()=>{const p=pads[selectedPad];if(!p)return;const[edge,d]=btn.dataset.nudge.split(':'),delta=Number(d);if(edge==='start')p.start=Math.max(0,Math.min(p.end-.02,p.start+delta));else p.end=Math.min(buffer.duration,Math.max(p.start+.02,p.end+delta));updatePads();updateEditInfo()}));
-els.sourceBpm.addEventListener('change',()=>{els.sourceBpm.value=clampBpm(els.sourceBpm.value);updateTempoUi()});els.targetBpm.addEventListener('change',()=>{els.targetBpm.value=clampBpm(els.targetBpm.value);updateTempoUi()});els.pitch.addEventListener('input',updateTempoUi);els.videoMode.addEventListener('click',()=>setVideoMode(!videoMode));
+els.sourceBpm.addEventListener('change',()=>{els.sourceBpm.value=clampBpm(els.sourceBpm.value);updateTempoUi()});els.targetBpm.addEventListener('change',()=>{els.targetBpm.value=clampBpm(els.targetBpm.value);updateTempoUi();if(transportMode){if(recording)stopRecording();else{stopScheduled();els.recordStatus.textContent='READY TO OVERDUB'}}els.recordClock.textContent=formatClock(loopDuration())});els.pitch.addEventListener('input',updateTempoUi);els.videoMode.addEventListener('click',()=>setVideoMode(!videoMode));
 els.autoChop.addEventListener('click',transientChop);
 els.equalChop.addEventListener('click',()=>{if(!buffer)return;applyBoundaries(Array.from({length:17},(_,i)=>buffer.duration*i/16),false);setMessage('Reset to 16 equal chops.')});
-els.recordLayer.addEventListener('click',startRecording);els.stopRecord.addEventListener('click',stopRecording);els.playLayers.addEventListener('click',playMix);els.stopLayers.addEventListener('click',()=>{stopScheduled();els.recordStatus.textContent=recording?'RECORDING':'READY TO OVERDUB'});els.exportWav.addEventListener('click',exportWav);
+els.metronome.addEventListener('click',()=>{metronomeOn=!metronomeOn;updateGrooveUi()});
+els.countIn.addEventListener('click',()=>{countInOn=!countInOn;updateGrooveUi()});
+els.loopBars.addEventListener('change',()=>{if(transportMode){const wasRecording=recording;if(wasRecording)stopRecording();else{stopScheduled();els.recordStatus.textContent='READY TO OVERDUB'}}els.recordClock.textContent=formatClock(loopDuration());setMessage('Loop length: '+loopBars()+' bars.')});
+els.quantise.addEventListener('change',()=>setMessage(els.quantise.value==='off'?'Quantise off.':'Quantise set to 1/'+els.quantise.value+'.'));
+els.recordLayer.addEventListener('click',startRecording);els.stopRecord.addEventListener('click',stopRecording);els.playLayers.addEventListener('click',playMix);els.stopLayers.addEventListener('click',()=>{if(recording)stopRecording();else{stopScheduled();els.recordStatus.textContent='READY TO OVERDUB';els.recordClock.textContent=formatClock(loopDuration())}});els.exportWav.addEventListener('click',exportWav);
 
 const down=new Set();window.addEventListener('keydown',e=>{const key=e.key.toLowerCase(),index=keys.indexOf(key);if(index<0||e.repeat||down.has(key))return;if(['input','textarea'].includes(document.activeElement?.tagName?.toLowerCase()))return;e.preventDefault();down.add(key);selectPad(index);playPad(index,true)});window.addEventListener('keyup',e=>{const key=e.key.toLowerCase(),index=keys.indexOf(key);down.delete(key);if(index>=0&&mode==='gate')stopPad(index)});window.addEventListener('blur',()=>{down.clear();if(mode==='gate')stopAllLiveSources()});els.waveform.addEventListener('pointerdown',e=>{if(!buffer)return;const r=els.waveform.getBoundingClientRect(),x=(e.clientX-r.left)/r.width*buffer.duration;let nearest=-1,best=Infinity;for(let i=1;i<16;i++){const d=Math.abs(pads[i].start-x);if(d<best){best=d;nearest=i}}if(best<buffer.duration*.035){dragMarker=nearest;els.waveform.setPointerCapture?.(e.pointerId)}});
 els.waveform.addEventListener('pointermove',e=>{if(dragMarker<1||!buffer)return;const r=els.waveform.getBoundingClientRect(),t=Math.max(pads[dragMarker-1].start+.02,Math.min(pads[dragMarker].end-.02,(e.clientX-r.left)/r.width*buffer.duration));pads[dragMarker-1].end=t;pads[dragMarker].start=t;updatePads();updateEditInfo();drawWaveform()});
 const endDrag=()=>{dragMarker=-1};els.waveform.addEventListener('pointerup',endDrag);els.waveform.addEventListener('pointercancel',endDrag);
-window.addEventListener('resize',drawWaveform);setVideoMode(false);createPads();
+window.addEventListener('resize',drawWaveform);setVideoMode(false);updateGrooveUi();createPads();
