@@ -49,6 +49,7 @@ def youtube_audio():
         return jsonify(error="Enter a valid YouTube URL."), 400
 
     pot_provider_url = os.getenv("POT_PROVIDER_URL", "").strip()
+    pot_provider_script_home = os.getenv("POT_PROVIDER_SCRIPT_HOME", "").strip()
 
     ydl_opts = {
         "quiet": True,
@@ -76,6 +77,12 @@ def youtube_audio():
     if pot_provider_url:
         ydl_opts["extractor_args"]["youtubepot-bgutilhttp"] = {
             "base_url": [pot_provider_url],
+        }
+    elif pot_provider_script_home:
+        # Single-container hosts with tight RAM can invoke the provider only
+        # when yt-dlp needs a token instead of keeping a Node server resident.
+        ydl_opts["extractor_args"]["youtubepot-bgutilscript"] = {
+            "server_home": [pot_provider_script_home],
         }
 
     try:
