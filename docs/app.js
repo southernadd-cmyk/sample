@@ -1,6 +1,6 @@
 const API_BASE=(window.SAMPLER_API_BASE || 'https://sample-production-df5c.up.railway.app').replace(/\/$/, '');
 const keys=['1','2','3','4','q','w','e','r','a','s','d','f','z','x','c','v'];
-const els={pads:document.querySelector('#pads'),url:document.querySelector('#youtubeUrl'),loadYoutube:document.querySelector('#loadYoutube'),file:document.querySelector('#audioFile'),message:document.querySelector('#message'),title:document.querySelector('#trackTitle'),duration:document.querySelector('#duration'),waveform:document.querySelector('#waveform'),selectedInfo:document.querySelector('#selectedInfo'),editPad:document.querySelector('#editPad'),editTime:document.querySelector('#editTime'),master:document.querySelector('#masterVolume'),modeBtn:document.querySelector('#modeBtn'),chokeBtn:document.querySelector('#chokeBtn'),stopAll:document.querySelector('#stopAll'),resetSlice:document.querySelector('#resetSlice'),audioState:document.querySelector('#audioState'),autoChop:document.querySelector('#autoChop'),equalChop:document.querySelector('#equalChop'),recordLayer:document.querySelector('#recordLayer'),stopRecord:document.querySelector('#stopRecord'),playLayers:document.querySelector('#playLayers'),stopLayers:document.querySelector('#stopLayers'),exportWav:document.querySelector('#exportWav'),layers:document.querySelector('#layers'),recordStatus:document.querySelector('#recordStatus'),recordClock:document.querySelector('#recordClock'),videoMode:document.querySelector('#videoMode'),videoPanel:document.querySelector('#videoPanel'),videoStatus:document.querySelector('#videoStatus'),youtubePlayer:document.querySelector('#youtubePlayer'),localVideo:document.querySelector('#localVideo'),videoPlaceholder:document.querySelector('#videoPlaceholder'),captureYoutube:document.querySelector('#captureYoutube'),stopCapture:document.querySelector('#stopCapture'),sourceBpm:document.querySelector('#sourceBpm'),targetBpm:document.querySelector('#targetBpm'),pitch:document.querySelector('#pitch'),pitchValue:document.querySelector('#pitchValue'),sourceInfo:document.querySelector('#sourceInfo'),sourcesList:document.querySelector('#sourcesList'),sourcesSummary:document.querySelector('#sourcesSummary'),loopBars:document.querySelector('#loopBars'),quantise:document.querySelector('#quantise'),metronome:document.querySelector('#metronome'),countIn:document.querySelector('#countIn')};
+const els={pads:document.querySelector('#pads'),url:document.querySelector('#youtubeUrl'),loadYoutube:document.querySelector('#loadYoutube'),file:document.querySelector('#audioFile'),message:document.querySelector('#message'),title:document.querySelector('#trackTitle'),duration:document.querySelector('#duration'),waveform:document.querySelector('#waveform'),selectedInfo:document.querySelector('#selectedInfo'),editPad:document.querySelector('#editPad'),editTime:document.querySelector('#editTime'),master:document.querySelector('#masterVolume'),modeBtn:document.querySelector('#modeBtn'),chokeBtn:document.querySelector('#chokeBtn'),stopAll:document.querySelector('#stopAll'),resetSlice:document.querySelector('#resetSlice'),audioState:document.querySelector('#audioState'),autoChop:document.querySelector('#autoChop'),equalChop:document.querySelector('#equalChop'),recordLayer:document.querySelector('#recordLayer'),stopRecord:document.querySelector('#stopRecord'),playLayers:document.querySelector('#playLayers'),stopLayers:document.querySelector('#stopLayers'),exportWav:document.querySelector('#exportWav'),layers:document.querySelector('#layers'),recordStatus:document.querySelector('#recordStatus'),recordClock:document.querySelector('#recordClock'),videoMode:document.querySelector('#videoMode'),videoPanel:document.querySelector('#videoPanel'),videoStatus:document.querySelector('#videoStatus'),youtubePlayer:document.querySelector('#youtubePlayer'),localVideo:document.querySelector('#localVideo'),videoPlaceholder:document.querySelector('#videoPlaceholder'),captureYoutube:document.querySelector('#captureYoutube'),stopCapture:document.querySelector('#stopCapture'),sourceBpm:document.querySelector('#sourceBpm'),targetBpm:document.querySelector('#targetBpm'),pitch:document.querySelector('#pitch'),pitchValue:document.querySelector('#pitchValue'),sourceInfo:document.querySelector('#sourceInfo'),sourcesList:document.querySelector('#sourcesList'),sourcesSummary:document.querySelector('#sourcesSummary'),loopBars:document.querySelector('#loopBars'),quantise:document.querySelector('#quantise'),metronome:document.querySelector('#metronome'),countIn:document.querySelector('#countIn'),midiConnect:document.querySelector('#midiConnect'),midiLearn:document.querySelector('#midiLearn'),midiReset:document.querySelector('#midiReset'),midiDevice:document.querySelector('#midiDevice'),midiStatus:document.querySelector('#midiStatus'),midiMapStatus:document.querySelector('#midiMapStatus')};
 let ctx,masterGain,buffer=null,pads=[],selectedPad=0,mode='oneshot',monoChoke=false;
 let detectedSourceBpm=120;
 let sampleSources=new Map(),activeSourceId=null,sourceSequence=0;
@@ -9,6 +9,8 @@ let layers=[],recording=false,currentLayer=null,recordStart=0,recordTimer=null,m
 let metronomeOn=false,countInOn=true,loopScheduler=null,nextLoopAt=0,transportStart=0,transportExcludeCurrent=false,transportMode=null,metroNodes=[],countInTimer=null;
 let videoMode=false,videoKind=null,youtubeVideoId=null,youtubePlayer=null,youtubeReady=false,videoStopTimer=null,localVideoUrl=null;
 let captureRecorder=null,captureStream=null,captureChunks=[],captureTimer=null,captureStopping=false;
+let midiAccess=null,midiInput=null,midiLearning=false,midiLearnPad=0,midiHeld=new Map();
+let midiMap=new Map(Array.from({length:16},(_,i)=>[36+i,i]));
 
 function ensureAudio(){if(!ctx){ctx=new(window.AudioContext||window.webkitAudioContext)();masterGain=ctx.createGain();masterGain.gain.value=Number(els.master.value);masterGain.connect(ctx.destination)}if(ctx.state==='suspended')ctx.resume()}
 function formatTime(s){if(!Number.isFinite(s))return'--:--';const m=Math.floor(s/60),sec=Math.floor(s%60).toString().padStart(2,'0');return m+':'+sec}
@@ -153,6 +155,137 @@ function detectBpm(audioBuffer){
   }catch{return 120}
 }
 
+
+function saveMidiMap(){
+  try{localStorage.setItem('mpctube-midi-map-v1',JSON.stringify([...midiMap.entries()]))}catch{}
+}
+function loadMidiMap(){
+  try{
+    const saved=JSON.parse(localStorage.getItem('mpctube-midi-map-v1')||'null');
+    if(Array.isArray(saved)&&saved.length){
+      midiMap=new Map(saved.map(([note,pad])=>[Number(note),Number(pad)]).filter(([note,pad])=>Number.isFinite(note)&&pad>=0&&pad<16))
+    }
+  }catch{}
+}
+function resetMidiMap(){
+  midiMap=new Map(Array.from({length:16},(_,i)=>[36+i,i]));
+  saveMidiMap();
+  midiLearning=false;midiLearnPad=0;
+  updateMidiUi();
+  setMessage('MIDI map reset: notes 36–51 trigger Pads 01–16.')
+}
+function midiNoteName(note){
+  const names=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+  const n=Number(note)||0;
+  return names[((n%12)+12)%12]+(Math.floor(n/12)-1)
+}
+function updateMidiUi(){
+  const connected=!!midiInput;
+  if(els.midiStatus)els.midiStatus.textContent=connected?('CONNECTED: '+(midiInput.name||'MIDI INPUT')):(midiAccess?'NO INPUT SELECTED':'NOT CONNECTED');
+  if(els.midiConnect){
+    els.midiConnect.classList.toggle('active',!!midiAccess);
+    els.midiConnect.textContent=midiAccess?'MIDI ENABLED':'ENABLE MIDI'
+  }
+  if(els.midiLearn){
+    els.midiLearn.disabled=!midiAccess;
+    els.midiLearn.classList.toggle('active',midiLearning);
+    els.midiLearn.textContent=midiLearning?'LEARNING PAD '+String(midiLearnPad+1).padStart(2,'0'):'MIDI LEARN'
+  }
+  if(els.midiReset)els.midiReset.disabled=!midiAccess;
+  if(els.midiMapStatus){
+    if(midiLearning)els.midiMapStatus.textContent='Press a MIDI pad/key for PAD '+String(midiLearnPad+1).padStart(2,'0')+'.';
+    else{
+      const entries=[...midiMap.entries()].sort((a,b)=>a[1]-b[1]);
+      const complete=entries.length===16;
+      els.midiMapStatus.textContent=complete
+        ? 'Mapped 16 pads • '+midiNoteName(entries[0]?.[0]??36)+'–'+midiNoteName(entries.at(-1)?.[0]??51)
+        : 'Custom map: '+entries.length+' of 16 pads mapped.'
+    }
+  }
+}
+function refreshMidiInputs(){
+  if(!midiAccess||!els.midiDevice)return;
+  const inputs=[...midiAccess.inputs.values()];
+  const current=midiInput?.id||els.midiDevice.value;
+  els.midiDevice.innerHTML='';
+  if(!inputs.length){
+    const opt=document.createElement('option');opt.value='';opt.textContent='No MIDI input detected';els.midiDevice.appendChild(opt);
+    els.midiDevice.disabled=true;
+    setMidiInput(null);
+    return
+  }
+  els.midiDevice.disabled=false;
+  inputs.forEach(input=>{
+    const opt=document.createElement('option');
+    opt.value=input.id;opt.textContent=input.name||input.manufacturer||('MIDI '+input.id);
+    els.midiDevice.appendChild(opt)
+  });
+  const chosen=inputs.find(x=>x.id===current)||inputs[0];
+  els.midiDevice.value=chosen.id;
+  setMidiInput(chosen)
+}
+function setMidiInput(input){
+  if(midiInput)midiInput.onmidimessage=null;
+  midiInput=input||null;
+  midiHeld.clear();
+  if(midiInput)midiInput.onmidimessage=handleMidiMessage;
+  updateMidiUi()
+}
+function handleMidiMessage(event){
+  const [status,noteRaw,velocityRaw]=event.data||[];
+  const command=(status||0)&0xf0,note=Number(noteRaw),velocity=Number(velocityRaw)||0;
+  const noteOn=command===0x90&&velocity>0;
+  const noteOff=command===0x80||(command===0x90&&velocity===0);
+  if(!noteOn&&!noteOff)return;
+
+  if(noteOn&&midiLearning){
+    for(const [mappedNote,pad] of [...midiMap.entries()])if(pad===midiLearnPad||mappedNote===note)midiMap.delete(mappedNote);
+    midiMap.set(note,midiLearnPad);
+    saveMidiMap();
+    midiLearnPad++;
+    if(midiLearnPad>=16){midiLearning=false;midiLearnPad=0;setMessage('MIDI Learn complete — all 16 pads mapped.')}
+    updateMidiUi();
+    return
+  }
+
+  const pad=midiMap.get(note);
+  if(pad==null)return;
+  if(noteOn){
+    const amount=Math.max(.05,Math.min(1,velocity/127));
+    midiHeld.set(note,pad);
+    selectPad(pad);playPad(pad,true,amount)
+  }else if(noteOff){
+    const heldPad=midiHeld.get(note);
+    midiHeld.delete(note);
+    if(mode==='gate'&&heldPad!=null)stopPad(heldPad)
+  }
+}
+async function enableMidi(){
+  if(!navigator.requestMIDIAccess){
+    setMessage('Web MIDI is not supported by this browser.',true);
+    if(els.midiStatus)els.midiStatus.textContent='UNSUPPORTED';
+    return
+  }
+  try{
+    midiAccess=await navigator.requestMIDIAccess({sysex:false});
+    midiAccess.onstatechange=refreshMidiInputs;
+    refreshMidiInputs();
+    updateMidiUi();
+    setMessage(midiInput?'MIDI ready: '+(midiInput.name||'controller')+'.':'MIDI enabled. Connect a controller to continue.')
+  }catch(err){
+    console.error(err);
+    setMessage('MIDI permission was denied or unavailable.',true);
+    if(els.midiStatus)els.midiStatus.textContent='PERMISSION DENIED'
+  }
+}
+function toggleMidiLearn(){
+  if(!midiAccess)return;
+  midiLearning=!midiLearning;
+  midiLearnPad=0;
+  if(midiLearning)midiMap=new Map();
+  updateMidiUi();
+  setMessage(midiLearning?'MIDI Learn: press the controller pad/key you want assigned to PAD 01.':'MIDI Learn cancelled.')
+}
 
 function youtubeIdFromUrl(value){
   try{
@@ -393,11 +526,11 @@ function transientChop(){
   applyBoundaries(points,false);setMessage('Transient chop applied. Drag the vertical markers to fine-tune it.')
 }
 
-function makeSource(index,destination=masterGain,when=0,durationOverride=null,rateOverride=null){if(!buffer||!pads[index])return null;const slice=pads[index],duration=Math.max(.02,durationOverride??(slice.end-slice.start)),source=(destination.context||ctx).createBufferSource();source.buffer=buffer;source.playbackRate.value=rateOverride??getPlaybackRate();source.connect(destination);source.start(when,slice.start,duration);return source}
-function playPad(index,capture=false){if(!buffer||!pads[index])return;ensureAudio();if(monoChoke)stopAllLiveSources();const slice=pads[index],duration=Math.max(.02,slice.end-slice.start),rate=getPlaybackRate(),source=makeSource(index,masterGain,0,duration,rate);if(!source)return;let group=activeSources.get(index);if(!group){group=new Set();activeSources.set(index,group)}group.add(source);source.onended=()=>{const g=activeSources.get(index);if(g){g.delete(source);if(!g.size){activeSources.delete(index);setHit(index,false)}}};setHit(index,true);triggerVideo(index,duration/rate);if(capture&&recording&&currentLayer&&ctx.currentTime>=recordStart){
+function makeSource(index,destination=masterGain,when=0,durationOverride=null,rateOverride=null,velocity=1){if(!buffer||!pads[index])return null;const slice=pads[index],duration=Math.max(.02,durationOverride??(slice.end-slice.start)),context=destination.context||ctx,source=context.createBufferSource(),gain=context.createGain();source.buffer=buffer;source.playbackRate.value=rateOverride??getPlaybackRate();gain.gain.value=Math.max(0,Math.min(1.2,Number(velocity)||1));source.connect(gain);gain.connect(destination);source.start(when,slice.start,duration);return source}
+function playPad(index,capture=false,velocity=1){if(!buffer||!pads[index])return;ensureAudio();if(monoChoke)stopAllLiveSources();const slice=pads[index],duration=Math.max(.02,slice.end-slice.start),rate=getPlaybackRate(),source=makeSource(index,masterGain,0,duration,rate,velocity);if(!source)return;let group=activeSources.get(index);if(!group){group=new Set();activeSources.set(index,group)}group.add(source);source.onended=()=>{const g=activeSources.get(index);if(g){g.delete(source);if(!g.size){activeSources.delete(index);setHit(index,false)}}};setHit(index,true);triggerVideo(index,duration/rate);if(capture&&recording&&currentLayer&&ctx.currentTime>=recordStart){
   const rawBeat=(ctx.currentTime-recordStart)/beatDuration();
   const beat=quantiseBeat(rawBeat);
-  currentLayer.events.push({pad:index,beat,time:beat*beatDuration(),duration,start:slice.start,rate,sourceId:activeSourceId})
+  currentLayer.events.push({pad:index,beat,time:beat*beatDuration(),duration,start:slice.start,rate,velocity,sourceId:activeSourceId})
 }}
 function stopPad(index){const group=activeSources.get(index);if(!group)return;for(const source of group){try{source.stop()}catch{}}activeSources.delete(index);setHit(index,false)}
 function stopAllLiveSources(){for(const[index,group]of activeSources){for(const source of group){try{source.stop()}catch{}}setHit(index,false)}activeSources.clear()}
@@ -441,8 +574,8 @@ function scheduleLayerCycle(cycleStart,excludeCurrent=false){
     for(const e of layer.events){
       const src=sourceForEvent(e);
       if(!src?.buffer)continue;
-      const s=ctx.createBufferSource();
-      s.buffer=src.buffer;s.playbackRate.value=e.rate||1;s.connect(masterGain);
+      const s=ctx.createBufferSource(),gain=ctx.createGain();
+      s.buffer=src.buffer;s.playbackRate.value=e.rate||1;gain.gain.value=e.velocity??1;s.connect(gain);gain.connect(masterGain);
       s.start(cycleStart+eventTime(e),e.start??0,e.duration);
       scheduledSources.push(s)
     }
@@ -532,7 +665,7 @@ function playMix(){
 function renderLayers(){els.layers.innerHTML='';if(!layers.length){els.layers.innerHTML='<div class="empty-layer">No recorded layers yet.</div>';return}layers.forEach(layer=>{const row=document.createElement('div');row.className='layer'+(layer.muted?' muted':'');row.innerHTML='<div class="layer-meta"><span class="layer-name">'+layer.name+'</span><span class="layer-source">'+(layer.sourceTitle||'Sample source')+'</span><span class="layer-events">'+layer.events.length+' hits</span></div><button data-action="mute">'+(layer.muted?'UNMUTE':'MUTE')+'</button><button data-action="solo">SOLO</button><button data-action="delete">DELETE</button>';row.querySelector('[data-action="mute"]').onclick=()=>{layer.muted=!layer.muted;renderLayers()};row.querySelector('[data-action="solo"]').onclick=()=>{layers.forEach(l=>l.muted=l!==layer);renderLayers()};row.querySelector('[data-action="delete"]').onclick=()=>{layers=layers.filter(l=>l!==layer);renderLayers();els.recordClock.textContent=formatClock(mixDuration())};els.layers.appendChild(row)})}
 
 async function exportWav(){if(!buffer||!layers.some(l=>!l.muted&&l.events.length))return setMessage('Nothing recorded to export.',true);const duration=loopDuration(),sr=buffer.sampleRate,offline=new OfflineAudioContext(2,Math.ceil(duration*sr),sr),gain=offline.createGain();gain.gain.value=Number(els.master.value);gain.connect(offline.destination);for(const layer of layers){if(layer.muted)continue;for(const e of layer.events)makeSourceOffline(offline,gain,e)}setMessage('Rendering '+loopBars()+'-bar loop WAV…');try{const rendered=await offline.startRendering(),wav=audioBufferToWav(rendered),blob=new Blob([wav],{type:'audio/wav'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='sample-loop-'+loopBars()+'bar-'+Math.round(clampBpm(els.targetBpm.value))+'bpm-'+new Date().toISOString().replace(/[:.]/g,'-')+'.wav';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);setMessage('Loop WAV exported.')}catch(err){console.error(err);setMessage('Could not render WAV.',true)}}
-function makeSourceOffline(offline,dest,e){const src=sourceForEvent(e);if(!src?.buffer)return;const s=offline.createBufferSource();s.buffer=src.buffer;s.playbackRate.value=e.rate||1;s.connect(dest);s.start(eventTime(e),e.start??0,Math.max(.02,e.duration))}
+function makeSourceOffline(offline,dest,e){const src=sourceForEvent(e);if(!src?.buffer)return;const s=offline.createBufferSource(),gain=offline.createGain();s.buffer=src.buffer;s.playbackRate.value=e.rate||1;gain.gain.value=e.velocity??1;s.connect(gain);gain.connect(dest);s.start(eventTime(e),e.start??0,Math.max(.02,e.duration))}
 function audioBufferToWav(b){const channels=b.numberOfChannels,samples=b.length,bytes=44+samples*channels*2,ab=new ArrayBuffer(bytes),v=new DataView(ab);let o=0;const str=s=>{for(let i=0;i<s.length;i++)v.setUint8(o++,s.charCodeAt(i))},u32=n=>{v.setUint32(o,n,true);o+=4},u16=n=>{v.setUint16(o,n,true);o+=2};str('RIFF');u32(bytes-8);str('WAVE');str('fmt ');u32(16);u16(1);u16(channels);u32(b.sampleRate);u32(b.sampleRate*channels*2);u16(channels*2);u16(16);str('data');u32(samples*channels*2);const data=Array.from({length:channels},(_,c)=>b.getChannelData(c));for(let i=0;i<samples;i++)for(let c=0;c<channels;c++){const x=Math.max(-1,Math.min(1,data[c][i]));v.setInt16(o,x<0?x*32768:x*32767,true);o+=2}return ab}
 
 async function loadYouTube(){const url=els.url.value.trim();if(!url)return setMessage('Paste a YouTube URL first.',true);if(!youtubeIdFromUrl(url))return setMessage('Paste a valid YouTube URL first.',true);prepareYoutubeVideo(url).catch(err=>console.warn('Video preview unavailable',err));ensureAudio();stopAllLiveSources();stopScheduled();els.loadYoutube.disabled=true;els.audioState.textContent='LOADING';setMessage('Fetching the YouTube audio stream…');try{const res=await fetch(API_BASE+'/api/youtube',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url})});if(!res.ok){const body=await res.json().catch(()=>({}));throw new Error(body.error||'YouTube import failed.')}const title=res.headers.get('X-Track-Title')||'YouTube sample',blob=await res.blob();await decodeArrayBuffer(await blob.arrayBuffer(),title)}catch(err){console.error(err);els.audioState.textContent=buffer?'READY':'NO SAMPLE';setMessage(err.message||'Could not load that YouTube video.',true)}finally{els.loadYoutube.disabled=false}}
@@ -546,6 +679,12 @@ els.countIn.addEventListener('click',()=>{countInOn=!countInOn;updateGrooveUi()}
 els.loopBars.addEventListener('change',()=>{if(transportMode){const wasRecording=recording;if(wasRecording)stopRecording();else{stopScheduled();els.recordStatus.textContent='READY TO OVERDUB'}}els.recordClock.textContent=formatClock(loopDuration());setMessage('Loop length: '+loopBars()+' bars.')});
 els.quantise.addEventListener('change',()=>setMessage(els.quantise.value==='off'?'Quantise off.':'Quantise set to 1/'+els.quantise.value+'.'));
 els.recordLayer.addEventListener('click',startRecording);els.stopRecord.addEventListener('click',stopRecording);els.playLayers.addEventListener('click',playMix);els.stopLayers.addEventListener('click',()=>{if(recording)stopRecording();else{stopScheduled();els.recordStatus.textContent='READY TO OVERDUB';els.recordClock.textContent=formatClock(loopDuration())}});els.exportWav.addEventListener('click',exportWav);
+
+els.midiConnect.addEventListener('click',enableMidi);
+els.midiLearn.addEventListener('click',toggleMidiLearn);
+els.midiReset.addEventListener('click',resetMidiMap);
+els.midiDevice.addEventListener('change',()=>{const input=midiAccess?.inputs.get(els.midiDevice.value)||null;setMidiInput(input);if(input)setMessage('MIDI input: '+(input.name||'controller')+'.')});
+loadMidiMap();updateMidiUi();
 
 const down=new Set();window.addEventListener('keydown',e=>{
   const tag=document.activeElement?.tagName?.toLowerCase();
