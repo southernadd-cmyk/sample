@@ -1,6 +1,6 @@
 const API_BASE=(window.SAMPLER_API_BASE || 'https://sample-production-df5c.up.railway.app').replace(/\/$/, '');
 const keys=['1','2','3','4','q','w','e','r','a','s','d','f','z','x','c','v'];
-const els={pads:document.querySelector('#pads'),url:document.querySelector('#youtubeUrl'),loadYoutube:document.querySelector('#loadYoutube'),file:document.querySelector('#audioFile'),message:document.querySelector('#message'),title:document.querySelector('#trackTitle'),duration:document.querySelector('#duration'),waveform:document.querySelector('#waveform'),selectedInfo:document.querySelector('#selectedInfo'),editPad:document.querySelector('#editPad'),editTime:document.querySelector('#editTime'),master:document.querySelector('#masterVolume'),modeBtn:document.querySelector('#modeBtn'),chokeBtn:document.querySelector('#chokeBtn'),stopAll:document.querySelector('#stopAll'),resetSlice:document.querySelector('#resetSlice'),audioState:document.querySelector('#audioState'),autoChop:document.querySelector('#autoChop'),equalChop:document.querySelector('#equalChop'),recordLayer:document.querySelector('#recordLayer'),stopRecord:document.querySelector('#stopRecord'),playLayers:document.querySelector('#playLayers'),stopLayers:document.querySelector('#stopLayers'),exportWav:document.querySelector('#exportWav'),layers:document.querySelector('#layers'),recordStatus:document.querySelector('#recordStatus'),recordClock:document.querySelector('#recordClock'),videoMode:document.querySelector('#videoMode'),videoPanel:document.querySelector('#videoPanel'),videoStatus:document.querySelector('#videoStatus'),youtubePlayer:document.querySelector('#youtubePlayer'),localVideo:document.querySelector('#localVideo'),videoPlaceholder:document.querySelector('#videoPlaceholder'),captureYoutube:document.querySelector('#captureYoutube'),stopCapture:document.querySelector('#stopCapture'),sourceBpm:document.querySelector('#sourceBpm'),targetBpm:document.querySelector('#targetBpm'),pitch:document.querySelector('#pitch'),pitchValue:document.querySelector('#pitchValue'),sourceInfo:document.querySelector('#sourceInfo'),loopBars:document.querySelector('#loopBars'),quantise:document.querySelector('#quantise'),metronome:document.querySelector('#metronome'),countIn:document.querySelector('#countIn')};
+const els={pads:document.querySelector('#pads'),url:document.querySelector('#youtubeUrl'),loadYoutube:document.querySelector('#loadYoutube'),file:document.querySelector('#audioFile'),message:document.querySelector('#message'),title:document.querySelector('#trackTitle'),duration:document.querySelector('#duration'),waveform:document.querySelector('#waveform'),selectedInfo:document.querySelector('#selectedInfo'),editPad:document.querySelector('#editPad'),editTime:document.querySelector('#editTime'),master:document.querySelector('#masterVolume'),modeBtn:document.querySelector('#modeBtn'),chokeBtn:document.querySelector('#chokeBtn'),stopAll:document.querySelector('#stopAll'),resetSlice:document.querySelector('#resetSlice'),audioState:document.querySelector('#audioState'),autoChop:document.querySelector('#autoChop'),equalChop:document.querySelector('#equalChop'),recordLayer:document.querySelector('#recordLayer'),stopRecord:document.querySelector('#stopRecord'),playLayers:document.querySelector('#playLayers'),stopLayers:document.querySelector('#stopLayers'),exportWav:document.querySelector('#exportWav'),layers:document.querySelector('#layers'),recordStatus:document.querySelector('#recordStatus'),recordClock:document.querySelector('#recordClock'),videoMode:document.querySelector('#videoMode'),videoPanel:document.querySelector('#videoPanel'),videoStatus:document.querySelector('#videoStatus'),youtubePlayer:document.querySelector('#youtubePlayer'),localVideo:document.querySelector('#localVideo'),videoPlaceholder:document.querySelector('#videoPlaceholder'),captureYoutube:document.querySelector('#captureYoutube'),stopCapture:document.querySelector('#stopCapture'),sourceBpm:document.querySelector('#sourceBpm'),targetBpm:document.querySelector('#targetBpm'),pitch:document.querySelector('#pitch'),pitchValue:document.querySelector('#pitchValue'),sourceInfo:document.querySelector('#sourceInfo'),sourcesList:document.querySelector('#sourcesList'),sourcesSummary:document.querySelector('#sourcesSummary'),loopBars:document.querySelector('#loopBars'),quantise:document.querySelector('#quantise'),metronome:document.querySelector('#metronome'),countIn:document.querySelector('#countIn')};
 let ctx,masterGain,buffer=null,pads=[],selectedPad=0,mode='oneshot',monoChoke=false;
 let detectedSourceBpm=120;
 let sampleSources=new Map(),activeSourceId=null,sourceSequence=0;
@@ -26,10 +26,76 @@ function updateTempoUi(){
   const st=Number(els.pitch.value)||0;
   els.pitchValue.textContent=(st>0?'+':'')+st+' st';
 }
+function clonePads(sourcePads=pads){
+  return sourcePads.map(p=>({...p}))
+}
 function activeSource(){return activeSourceId?sampleSources.get(activeSourceId):null}
 function sourceForEvent(e){return (e?.sourceId&&sampleSources.get(e.sourceId))||activeSource()||null}
+function saveActiveSourceState(){
+  const src=activeSource();
+  if(!src)return;
+  src.pads=clonePads();
+  src.bpm=clampBpm(els.sourceBpm?.value||src.bpm||120);
+  src.pitch=Number(els.pitch?.value)||0;
+}
 function updateSourceInfo(){
-  if(els.sourceInfo)els.sourceInfo.textContent=sampleSources.size+' SOURCE'+(sampleSources.size===1?'':'S')+' LOADED'
+  const count=sampleSources.size;
+  if(els.sourceInfo)els.sourceInfo.textContent=count+' SOURCE'+(count===1?'':'S')+' LOADED';
+  if(els.sourcesSummary)els.sourcesSummary.textContent=count?count+' LOADED':'NO SOURCES YET'
+}
+function renderSources(){
+  updateSourceInfo();
+  if(!els.sourcesList)return;
+  els.sourcesList.innerHTML='';
+  if(!sampleSources.size){
+    els.sourcesList.innerHTML='<div class="sources-empty">Captured YouTube sources will appear here.</div>';
+    return
+  }
+  [...sampleSources.values()].forEach((src,index)=>{
+    const btn=document.createElement('button');
+    btn.className='source-card'+(src.id===activeSourceId?' active':'');
+    btn.type='button';
+    btn.dataset.sourceId=src.id;
+    btn.innerHTML=
+      '<span class="source-index">'+String(index+1).padStart(2,'0')+'</span>'+
+      '<span class="source-copy"><strong>'+escapeHtml(src.title||('Source '+(index+1)))+'</strong>'+
+      '<small>'+Math.round(src.bpm||120)+' BPM • '+formatTime(src.buffer?.duration||0)+'</small></span>'+
+      '<span class="source-use">'+(src.id===activeSourceId?'ACTIVE':'USE')+'</span>';
+    btn.addEventListener('click',()=>switchSource(src.id));
+    els.sourcesList.appendChild(btn)
+  })
+}
+function escapeHtml(value){
+  return String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]))
+}
+async function switchSource(sourceId){
+  if(sourceId===activeSourceId)return;
+  const src=sampleSources.get(sourceId);
+  if(!src?.buffer)return;
+  if(recording)stopRecording(); else stopScheduled();
+  stopAllLiveSources();
+  saveActiveSourceState();
+
+  activeSourceId=sourceId;
+  buffer=src.buffer;
+  pads=clonePads(src.pads||[]);
+  if(!pads.length){
+    applyBoundaries(Array.from({length:17},(_,i)=>buffer.duration*i/16),true);
+    src.pads=clonePads()
+  }
+  detectedSourceBpm=src.bpm||detectBpm(buffer);
+  els.sourceBpm.value=Math.round(detectedSourceBpm);
+  els.pitch.value=Number.isFinite(src.pitch)?src.pitch:0;
+  updateTempoUi();
+  els.title.textContent=(src.title||'Sample').toUpperCase();
+  els.duration.textContent=formatTime(buffer.duration);
+  els.audioState.textContent='READY';
+  if(src.url){
+    els.url.value=src.url;
+    prepareYoutubeVideo(src.url).catch(()=>{})
+  }
+  drawWaveform();updatePads();selectPad(0);renderSources();
+  setMessage('Switched to '+(src.title||'source')+'. Existing layers remain in the mix.')
 }
 function beatDuration(){return 60/clampBpm(els.targetBpm?.value||120)}
 function loopBars(){return Math.max(1,Number(els.loopBars?.value)||4)}
@@ -158,6 +224,7 @@ async function startBrowserCapture(){
   if(!url||!youtubeIdFromUrl(url))return setMessage('Paste a valid YouTube URL first.',true);
   if(!navigator.mediaDevices?.getDisplayMedia)return setMessage('This browser does not support tab-audio capture.',true);
   if(captureRecorder)return;
+  saveActiveSourceState();
   if(recording)stopRecording();
   else stopScheduled();
   stopAllLiveSources();
@@ -278,7 +345,7 @@ async function decodeArrayBuffer(ab,title='Sample'){
     buffer=decoded;
     detectedSourceBpm=detectBpm(buffer);
     if(els.sourceBpm)els.sourceBpm.value=Math.round(detectedSourceBpm);
-    if(els.targetBpm)els.targetBpm.value=Math.round(detectedSourceBpm);
+    if(els.targetBpm&&sampleSources.size===0)els.targetBpm.value=Math.round(detectedSourceBpm);
     if(els.pitch)els.pitch.value=0;
     updateTempoUi();
     buildSlices();
@@ -289,10 +356,14 @@ async function decodeArrayBuffer(ab,title='Sample'){
       title,
       buffer:decoded,
       bpm:detectedSourceBpm,
+      pitch:0,
+      pads:clonePads(),
+      url:els.url?.value?.trim()||'',
+      youtubeId:youtubeIdFromUrl(els.url?.value?.trim()||''),
       createdAt:Date.now()
     });
     activeSourceId=sourceId;
-    updateSourceInfo();
+    renderSources();
     renderLayers();
 
     els.title.textContent=title.toUpperCase();
@@ -343,7 +414,7 @@ function stopScheduled(){
 function setHit(i,on){const p=els.pads.children[i];if(p)p.classList.toggle('hit',on)}
 function selectPad(i){selectedPad=i;[...els.pads.children].forEach((p,n)=>p.classList.toggle('selected',n===i));const label='PAD '+String(i+1).padStart(2,'0');els.selectedInfo.textContent=label;els.editPad.textContent=label;updateEditInfo()}
 function updateEditInfo(){const p=pads[selectedPad];els.editTime.textContent=p?p.start.toFixed(2)+'s — '+p.end.toFixed(2)+'s':'0.00s — 0.00s'}
-function updatePads(){[...els.pads.children].forEach((pad,i)=>{const p=pads[i];pad.querySelector('.slice').textContent=p?p.start.toFixed(1)+'–'+p.end.toFixed(1)+'s':'EMPTY'})}
+function updatePads(){[...els.pads.children].forEach((pad,i)=>{const p=pads[i];pad.querySelector('.slice').textContent=p?p.start.toFixed(1)+'–'+p.end.toFixed(1)+'s':'EMPTY'});const src=activeSource();if(src)src.pads=clonePads()}
 
 function drawWaveform(){const c=els.waveform,dpr=window.devicePixelRatio||1,r=c.getBoundingClientRect();c.width=Math.max(600,Math.floor(r.width*dpr));c.height=Math.max(180,Math.floor(r.height*dpr));const g=c.getContext('2d'),w=c.width,h=c.height;g.clearRect(0,0,w,h);g.fillStyle='#8cad74';g.fillRect(0,0,w,h);if(!buffer)return;const data=buffer.getChannelData(0),center=h/2,step=Math.max(1,Math.floor(data.length/w));g.strokeStyle='#203219';g.lineWidth=Math.max(1,dpr);g.beginPath();for(let x=0;x<w;x++){let min=1,max=-1,start=x*step,end=Math.min(data.length,start+step);for(let i=start;i<end;i++){const v=data[i];if(v<min)min=v;if(v>max)max=v}g.moveTo(x,center+min*center*.86);g.lineTo(x,center+max*center*.86)}g.stroke();g.strokeStyle='#405b32';for(let i=1;i<16;i++){const x=(pads[i]?.start??(buffer.duration*i/16))/buffer.duration*w;g.beginPath();g.moveTo(x,0);g.lineTo(x,h);g.stroke()}}
 
@@ -467,7 +538,7 @@ function audioBufferToWav(b){const channels=b.numberOfChannels,samples=b.length,
 async function loadYouTube(){const url=els.url.value.trim();if(!url)return setMessage('Paste a YouTube URL first.',true);if(!youtubeIdFromUrl(url))return setMessage('Paste a valid YouTube URL first.',true);prepareYoutubeVideo(url).catch(err=>console.warn('Video preview unavailable',err));ensureAudio();stopAllLiveSources();stopScheduled();els.loadYoutube.disabled=true;els.audioState.textContent='LOADING';setMessage('Fetching the YouTube audio stream…');try{const res=await fetch(API_BASE+'/api/youtube',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url})});if(!res.ok){const body=await res.json().catch(()=>({}));throw new Error(body.error||'YouTube import failed.')}const title=res.headers.get('X-Track-Title')||'YouTube sample',blob=await res.blob();await decodeArrayBuffer(await blob.arrayBuffer(),title)}catch(err){console.error(err);els.audioState.textContent=buffer?'READY':'NO SAMPLE';setMessage(err.message||'Could not load that YouTube video.',true)}finally{els.loadYoutube.disabled=false}}
 
 els.captureYoutube.addEventListener('click',startBrowserCapture);els.stopCapture.addEventListener('click',stopBrowserCapture);els.url.addEventListener('keydown',e=>{if(e.key==='Enter')startBrowserCapture()});els.master.addEventListener('input',()=>{if(masterGain)masterGain.gain.value=Number(els.master.value)});els.modeBtn.addEventListener('click',()=>{mode=mode==='oneshot'?'gate':'oneshot';els.modeBtn.textContent='MODE: '+(mode==='oneshot'?'ONE SHOT':'GATE')});els.chokeBtn.addEventListener('click',()=>{monoChoke=!monoChoke;const poly=!monoChoke;els.chokeBtn.classList.toggle('active',poly);els.chokeBtn.setAttribute('aria-pressed',String(poly));els.chokeBtn.textContent='POLY: '+(poly?'ON':'OFF')});els.stopAll.addEventListener('click',()=>{stopAllLiveSources();stopScheduled()});els.resetSlice.addEventListener('click',()=>{const p=pads[selectedPad];if(!p)return;p.start=p.defaultStart;p.end=p.defaultEnd;updatePads();updateEditInfo()});document.querySelectorAll('[data-nudge]').forEach(btn=>btn.addEventListener('click',()=>{const p=pads[selectedPad];if(!p)return;const[edge,d]=btn.dataset.nudge.split(':'),delta=Number(d);if(edge==='start')p.start=Math.max(0,Math.min(p.end-.02,p.start+delta));else p.end=Math.min(buffer.duration,Math.max(p.start+.02,p.end+delta));updatePads();updateEditInfo()}));
-els.sourceBpm.addEventListener('change',()=>{els.sourceBpm.value=clampBpm(els.sourceBpm.value);updateTempoUi()});els.targetBpm.addEventListener('change',()=>{els.targetBpm.value=clampBpm(els.targetBpm.value);updateTempoUi();if(transportMode){if(recording)stopRecording();else{stopScheduled();els.recordStatus.textContent='READY TO OVERDUB'}}els.recordClock.textContent=formatClock(loopDuration())});els.pitch.addEventListener('input',updateTempoUi);els.videoMode.addEventListener('click',()=>setVideoMode(!videoMode));
+els.sourceBpm.addEventListener('change',()=>{els.sourceBpm.value=clampBpm(els.sourceBpm.value);const src=activeSource();if(src)src.bpm=Number(els.sourceBpm.value);updateTempoUi();renderSources()});els.targetBpm.addEventListener('change',()=>{els.targetBpm.value=clampBpm(els.targetBpm.value);updateTempoUi();if(transportMode){if(recording)stopRecording();else{stopScheduled();els.recordStatus.textContent='READY TO OVERDUB'}}els.recordClock.textContent=formatClock(loopDuration())});els.pitch.addEventListener('input',()=>{const src=activeSource();if(src)src.pitch=Number(els.pitch.value)||0;updateTempoUi()});els.videoMode.addEventListener('click',()=>setVideoMode(!videoMode));
 els.autoChop.addEventListener('click',transientChop);
 els.equalChop.addEventListener('click',()=>{if(!buffer)return;applyBoundaries(Array.from({length:17},(_,i)=>buffer.duration*i/16),false);setMessage('Reset to 16 equal chops.')});
 els.metronome.addEventListener('click',()=>{metronomeOn=!metronomeOn;updateGrooveUi()});
@@ -479,4 +550,4 @@ els.recordLayer.addEventListener('click',startRecording);els.stopRecord.addEvent
 const down=new Set();window.addEventListener('keydown',e=>{const key=e.key.toLowerCase(),index=keys.indexOf(key);if(index<0||e.repeat||down.has(key))return;if(['input','textarea'].includes(document.activeElement?.tagName?.toLowerCase()))return;e.preventDefault();down.add(key);selectPad(index);playPad(index,true)});window.addEventListener('keyup',e=>{const key=e.key.toLowerCase(),index=keys.indexOf(key);down.delete(key);if(index>=0&&mode==='gate')stopPad(index)});window.addEventListener('blur',()=>{down.clear();if(mode==='gate')stopAllLiveSources()});els.waveform.addEventListener('pointerdown',e=>{if(!buffer)return;const r=els.waveform.getBoundingClientRect(),x=(e.clientX-r.left)/r.width*buffer.duration;let nearest=-1,best=Infinity;for(let i=1;i<16;i++){const d=Math.abs(pads[i].start-x);if(d<best){best=d;nearest=i}}if(best<buffer.duration*.035){dragMarker=nearest;els.waveform.setPointerCapture?.(e.pointerId)}});
 els.waveform.addEventListener('pointermove',e=>{if(dragMarker<1||!buffer)return;const r=els.waveform.getBoundingClientRect(),t=Math.max(pads[dragMarker-1].start+.02,Math.min(pads[dragMarker].end-.02,(e.clientX-r.left)/r.width*buffer.duration));pads[dragMarker-1].end=t;pads[dragMarker].start=t;updatePads();updateEditInfo();drawWaveform()});
 const endDrag=()=>{dragMarker=-1};els.waveform.addEventListener('pointerup',endDrag);els.waveform.addEventListener('pointercancel',endDrag);
-window.addEventListener('resize',drawWaveform);setVideoMode(false);updateGrooveUi();updateSourceInfo();createPads();
+window.addEventListener('resize',drawWaveform);setVideoMode(false);updateGrooveUi();renderSources();createPads();
