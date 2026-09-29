@@ -61,3 +61,14 @@ JSON body:
 ```
 
 The API proxies a playable media stream back to the browser and exposes the title through the `X-Track-Title` response header.
+
+
+## Back4app free container
+
+The Dockerfile is also prepared for a single 256 MB Back4app container.
+
+Instead of keeping the PO-token HTTP server running permanently, it uses the provider's on-demand script mode:
+
+`POT_PROVIDER_SCRIPT_HOME=/opt/bgutil/server`
+
+This keeps idle memory lower. Railway can continue using the separate HTTP provider through `POT_PROVIDER_URL`; the application automatically prefers that when present.
