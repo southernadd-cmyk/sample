@@ -23,3 +23,24 @@ body{margin:0;background:radial-gradient(circle at 30% 0,#252a25 0,#101210 48%,#
 .layer-meta{min-width:0;flex-wrap:wrap}
 .layer-source{display:block;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--amber);font-size:10px}
 #sourceInfo{color:var(--amber)}
+
+.brand{display:flex;align-items:center;gap:16px;min-width:0}
+.brand-logo{display:block;width:min(360px,48vw);height:auto;max-height:76px;object-fit:contain;object-position:left center}
+.brand-copy{min-width:0}
+.brand-tagline{margin-top:4px;color:var(--muted);font-size:11px;letter-spacing:.08em}
+.sources-panel{margin-top:14px;padding:12px;border:1px solid var(--line);border-radius:10px;background:#121512}
+.sources-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:9px}
+.sources-head>span:last-child{font-size:10px;color:var(--muted)}
+.sources-list{display:flex;gap:8px;overflow-x:auto;padding-bottom:2px;scrollbar-width:thin}
+.source-card{flex:0 0 min(260px,78vw);display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:9px;align-items:center;text-align:left;border:1px solid var(--line);background:#202420;color:var(--ink);border-radius:9px;padding:9px;cursor:pointer}
+.source-card:hover{border-color:#657065}
+.source-card.active{border-color:var(--lime);box-shadow:inset 0 0 0 1px #c9ff4a33}
+.source-index{display:grid;place-items:center;width:30px;height:30px;border-radius:7px;background:#0d100d;color:var(--lime);font-weight:900;font-size:11px}
+.source-copy{min-width:0}
+.source-copy strong,.source-copy small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.source-copy strong{font-size:11px}
+.source-copy small{margin-top:3px;color:var(--muted);font-size:9px}
+.source-use{font-size:9px;color:var(--amber);font-weight:900}
+.source-card.active .source-use{color:var(--lime)}
+.sources-empty{color:var(--muted);font-size:10px;padding:6px 2px}
+@media(max-width:700px){.topbar{align-items:flex-start}.brand{gap:10px}.brand-logo{width:min(260px,62vw)}.brand-copy{display:none}}
