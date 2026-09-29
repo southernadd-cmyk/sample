@@ -1,0 +1,16 @@
+name: Check Pages JavaScript
+
+on:
+  push:
+    paths:
+      - 'docs/app.js'
+      - '.github/workflows/check-pages-js.yml'
+  workflow_dispatch:
+
+jobs:
+  syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Check sampler JavaScript
+        run: node --check docs/app.js
