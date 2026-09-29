@@ -53,12 +53,18 @@ def youtube_audio():
         "quiet": True,
         "no_warnings": True,
         "noplaylist": True,
-        "format": "bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/best",
+        # Prefer a direct audio-only stream. If YouTube exposes only a combined
+        # A/V stream for this client/session, allow that as a browser-decodable
+        # fallback rather than failing the import.
+        "format": "bestaudio[acodec!=none]/best[acodec!=none]",
         "skip_download": True,
         "socket_timeout": 20,
         "extractor_args": {
             "youtube": {
-                "player_client": ["mweb"],
+                # Current yt-dlp guidance for PO-token-backed web extraction is
+                # to include the default clients alongside mweb rather than
+                # forcing mweb alone.
+                "player_client": ["default", "mweb"],
             },
         },
     }
