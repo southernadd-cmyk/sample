@@ -23,6 +23,11 @@
         <input id="youtubeUrl" type="url" placeholder="https://www.youtube.com/watch?v=…" autocomplete="off">
         <button id="loadYoutube" class="primary">LOAD + CHOP</button>
       </div>
+      <div class="capture-row">
+        <button id="captureYoutube" class="toggle">CAPTURE IN BROWSER</button>
+        <button id="stopCapture" class="danger" disabled>STOP CAPTURE</button>
+        <span class="hint">Free fallback: choose <strong>This Tab</strong> and enable tab audio. The YouTube video will play here; stop when you have enough audio to sample.</span>
+      </div>
       <div class="or"><span>or</span></div>
       <div class="file-row">
         <label class="file-button">LOAD LOCAL MEDIA<input id="audioFile" type="file" accept="audio/*,video/*"></label>
