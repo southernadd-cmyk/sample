@@ -21,17 +21,11 @@
       <label for="youtubeUrl">YouTube URL</label>
       <div class="load-row">
         <input id="youtubeUrl" type="url" placeholder="https://www.youtube.com/watch?v=…" autocomplete="off">
-        <button id="loadYoutube" class="primary">LOAD + CHOP</button>
+        <button id="captureYoutube" class="primary">CAPTURE + CHOP</button>
+        <button id="stopCapture" class="danger" disabled>STOP CAPTURE</button>
       </div>
       <div class="capture-row">
-        <button id="captureYoutube" class="toggle">CAPTURE IN BROWSER</button>
-        <button id="stopCapture" class="danger" disabled>STOP CAPTURE</button>
-        <span class="hint">Free fallback: choose <strong>This Tab</strong> and enable tab audio. The YouTube video will play here; stop when you have enough audio to sample.</span>
-      </div>
-      <div class="or"><span>or</span></div>
-      <div class="file-row">
-        <label class="file-button">LOAD LOCAL MEDIA<input id="audioFile" type="file" accept="audio/*,video/*"></label>
-        <span class="hint">Audio is sampled into 16 slices. Video files can also drive the visual playback. Use media you have permission to sample.</span>
+        <span class="hint">Choose <strong>This Tab</strong> in Chrome and enable tab audio. Let the section you want play, then stop capture. Everything stays in your browser.</span>
       </div>
       <div id="message" class="message" aria-live="polite"></div>
     </section>
@@ -46,7 +40,7 @@
           <div class="video-stage">
             <div id="youtubePlayer"></div>
             <video id="localVideo" muted playsinline preload="metadata"></video>
-            <div id="videoPlaceholder" class="video-placeholder">LOAD A YOUTUBE URL OR LOCAL VIDEO</div>
+            <div id="videoPlaceholder" class="video-placeholder">PASTE A YOUTUBE URL AND CAPTURE</div>
           </div>
         </div>
 
@@ -64,11 +58,14 @@
 
         <div class="controls">
           <label>MASTER<input id="masterVolume" type="range" min="0" max="1.2" value="0.9" step="0.01"></label>
+          <label>SOURCE BPM<input id="sourceBpm" type="number" min="40" max="240" value="120" step="1"></label>
+          <label>TARGET BPM<input id="targetBpm" type="number" min="40" max="240" value="120" step="1"></label>
+          <label>PITCH <span id="pitchValue" class="control-value">0 st</span><input id="pitch" type="range" min="-12" max="12" value="0" step="1"></label>
           <button id="autoChop" class="toggle">AUTO CHOP: TRANSIENTS</button>
           <button id="equalChop" class="toggle">EQUAL 16</button>
           <button id="videoMode" class="toggle">VIDEO MODE: OFF</button>
           <button id="modeBtn" class="toggle" data-mode="oneshot">MODE: ONE SHOT</button>
-          <button id="chokeBtn" class="toggle active" aria-pressed="true">MONO CHOKE: ON</button>
+          <button id="chokeBtn" class="toggle active" aria-pressed="true">POLY: ON</button>
           <button id="stopAll" class="danger">STOP ALL</button>
         </div>
 
