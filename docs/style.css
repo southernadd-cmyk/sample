@@ -19,3 +19,7 @@ body{margin:0;background:radial-gradient(circle at 30% 0,#252a25 0,#101210 48%,#
 .groove-controls button{border:1px solid var(--line);background:#252a25;color:var(--ink);border-radius:8px;padding:10px;cursor:pointer}
 .groove-controls button.active{border-color:var(--lime);color:var(--lime)}
 @media(max-width:700px){.groove-controls{grid-template-columns:1fr 1fr}}
+
+.layer-meta{min-width:0;flex-wrap:wrap}
+.layer-source{display:block;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--amber);font-size:10px}
+#sourceInfo{color:var(--amber)}
