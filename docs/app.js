@@ -796,6 +796,29 @@ function playPad(index,capture=false,velocity=1){if(!buffer||!pads[index])return
 }}
 function stopPad(index){const group=activeSources.get(index);if(!group)return;for(const source of group){try{source.stop()}catch{}}activeSources.delete(index);setHit(index,false)}
 function stopAllLiveSources(){for(const[index,group]of activeSources){for(const source of group){try{source.stop()}catch{}}setHit(index,false)}activeSources.clear()}
+function updateBarProgress(elapsed=0,state='STOPPED'){
+  const panel=document.querySelector('#barProgress');
+  if(!panel)return;
+  const running=state==='RECORDING'||state==='PLAYING';
+  const rawBeat=Math.max(0,elapsed)/beatDuration();
+  const loopBeat=rawBeat%loopBeats();
+  const bar=Math.floor(loopBeat/4),beat=loopBeat%4;
+  const fraction=running?beat/4:0;
+  panel.classList.toggle('is-recording',state==='RECORDING');
+  document.querySelector('#barPosition').textContent='BAR '+(bar+1)+' OF '+loopBars()+' · BEAT '+(Math.floor(beat)+1);
+  document.querySelector('#barProgressState').textContent=state;
+  document.querySelector('#barFill').style.width=(fraction*100)+'%';
+  document.querySelector('#barPlayhead').style.left=(fraction*100)+'%';
+  panel.querySelectorAll('.beat-cells span').forEach((cell,i)=>cell.classList.toggle('current',running&&i===Math.floor(beat)));
+  const markers=document.querySelector('#loopBarMarkers');
+  if(markers.children.length!==loopBars()){
+    markers.replaceChildren(...Array.from({length:loopBars()},(_,i)=>{
+      const marker=document.createElement('span');marker.textContent='BAR '+(i+1);return marker
+    }));
+  }
+  [...markers.children].forEach((marker,i)=>marker.classList.toggle('current',running&&i===bar));
+}
+
 function stopScheduled(){
   recordArm++;recordArming=false;
   for(const s of scheduledSources){try{s.stop()}catch{}}
@@ -805,7 +828,8 @@ function stopScheduled(){
   if(loopScheduler){clearInterval(loopScheduler);loopScheduler=null}
   if(mixTimer){clearInterval(mixTimer);mixTimer=null}
   if(countInTimer){clearTimeout(countInTimer);countInTimer=null}
-  transportMode=null
+  transportMode=null;
+  updateBarProgress()
 }
 function setHit(i,on){const p=els.pads.children[i];if(p)p.classList.toggle('hit',on)}
 function selectPad(i){selectedPad=i;[...els.pads.children].forEach((p,n)=>p.classList.toggle('selected',n===i));const label='PAD '+String(i+1).padStart(2,'0');els.selectedInfo.textContent=label;els.editPad.textContent=label;updateEditInfo()}
@@ -883,6 +907,7 @@ async function startRecording(){
   ensureAudio();stopScheduled();
   const arm=recordArm,useCountIn=countInOn;
   recordArming=true;
+  updateBarProgress(0,'PREPARING');
   let voices=null;
   if(useCountIn){
     els.recordStatus.textContent='PREPARING VOICE COUNT-IN';
@@ -903,10 +928,12 @@ async function startRecording(){
     const remaining=recordStart-ctx.currentTime;
     if(remaining>0){
       const number=Math.max(1,Math.min(3,3-Math.floor((ctx.currentTime-prep)/beat)));
+      updateBarProgress(0,'COUNT-IN');
       els.recordStatus.textContent='GET READY — '+number;
       els.recordClock.textContent=String(number);
       els.recordClock.classList.add('counting')
     }else{
+      updateBarProgress(ctx.currentTime-recordStart,'RECORDING');
       els.recordStatus.textContent='RECORDING '+currentLayer.name.toUpperCase();
       const pos=((ctx.currentTime-recordStart)%loopDuration()+loopDuration())%loopDuration();
       const showGo=useCountIn&&ctx.currentTime-recordStart<beat;
@@ -943,7 +970,8 @@ function playMix(){
   els.recordStatus.textContent='LOOPING MIX';
   mixTimer=setInterval(()=>{
     const pos=((ctx.currentTime-mixStart)%loopDuration()+loopDuration())%loopDuration();
-    els.recordClock.textContent=formatClock(pos)
+    els.recordClock.textContent=formatClock(pos);
+    updateBarProgress(ctx.currentTime-mixStart,ctx.currentTime>=mixStart?'PLAYING':'PREPARING')
   },50)
 }
 function renderLayers(){els.layers.innerHTML='';if(!layers.length){els.layers.innerHTML='<div class="empty-layer">No recorded layers yet.</div>';return}layers.forEach(layer=>{const row=document.createElement('div');row.className='layer'+(layer.muted?' muted':'');row.innerHTML='<div class="layer-meta"><span class="layer-name">'+layer.name+'</span><span class="layer-source">'+(layer.sourceTitle||'Sample source')+'</span><span class="layer-events">'+layer.events.length+' hits</span></div><button data-action="mute">'+(layer.muted?'UNMUTE':'MUTE')+'</button><button data-action="solo">SOLO</button><button data-action="delete">DELETE</button>';row.querySelector('[data-action="mute"]').onclick=()=>{layer.muted=!layer.muted;renderLayers();markProjectDirty()};row.querySelector('[data-action="solo"]').onclick=()=>{layers.forEach(l=>l.muted=l!==layer);renderLayers();markProjectDirty()};row.querySelector('[data-action="delete"]').onclick=()=>{layers=layers.filter(l=>l!==layer);renderLayers();els.recordClock.textContent=formatClock(mixDuration());markProjectDirty()};els.layers.appendChild(row)})}
@@ -996,3 +1024,6 @@ const down=new Set();window.addEventListener('keydown',e=>{
 els.waveform.addEventListener('pointermove',e=>{if(dragMarker<1||!buffer)return;const r=els.waveform.getBoundingClientRect(),t=Math.max(pads[dragMarker-1].start+.02,Math.min(pads[dragMarker].end-.02,(e.clientX-r.left)/r.width*buffer.duration));pads[dragMarker-1].end=t;pads[dragMarker].start=t;updatePads();updateEditInfo();drawWaveform();markProjectDirty()});
 const endDrag=()=>{dragMarker=-1};els.waveform.addEventListener('pointerup',endDrag);els.waveform.addEventListener('pointercancel',endDrag);
 window.addEventListener('resize',drawWaveform);setVideoMode(false);updateGrooveUi();renderSources();createPads();
+
+updateBarProgress();
+els.loopBars.addEventListener('change',()=>updateBarProgress());
