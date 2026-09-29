@@ -5,7 +5,7 @@ let ctx,masterGain,buffer=null,pads=[],selectedPad=0,mode='oneshot',monoChoke=fa
 let detectedSourceBpm=120;
 let sampleSources=new Map(),activeSourceId=null,sourceSequence=0;
 let activeSources=new Map(),scheduledSources=[],dragMarker=-1;
-let layers=[],recording=false,currentLayer=null,recordStart=0,recordTimer=null,mixStart=0,mixTimer=null;
+let layers=[],recording=false,currentLayer=null,recordStart=0,recordEnd=0,recordTimer=null,mixStart=0,mixTimer=null;
 let metronomeOn=false,countInOn=true,loopScheduler=null,nextLoopAt=0,transportStart=0,transportExcludeCurrent=false,transportMode=null,metroNodes=[],countInTimer=null;
 let videoMode=false,videoKind=null,youtubeVideoId=null,youtubePlayer=null,youtubeReady=false,videoStopTimer=null,localVideoUrl=null;
 let captureRecorder=null,captureStream=null,captureChunks=[],captureTimer=null,captureStopping=false;
@@ -789,7 +789,7 @@ function transientChop(){
 }
 
 function makeSource(index,destination=masterGain,when=0,durationOverride=null,rateOverride=null,velocity=1){if(!buffer||!pads[index])return null;const slice=pads[index],duration=Math.max(.02,durationOverride??(slice.end-slice.start)),context=destination.context||ctx,source=context.createBufferSource(),gain=context.createGain();source.buffer=buffer;source.playbackRate.value=rateOverride??getPlaybackRate();gain.gain.value=Math.max(0,Math.min(1.2,Number(velocity)||1));source.connect(gain);gain.connect(destination);source.start(when,slice.start,duration);return source}
-function playPad(index,capture=false,velocity=1){if(!buffer||!pads[index])return;ensureAudio();if(monoChoke)stopAllLiveSources();const slice=pads[index],duration=Math.max(.02,slice.end-slice.start),rate=getPlaybackRate(),source=makeSource(index,masterGain,0,duration,rate,velocity);if(!source)return;let group=activeSources.get(index);if(!group){group=new Set();activeSources.set(index,group)}group.add(source);source.onended=()=>{const g=activeSources.get(index);if(g){g.delete(source);if(!g.size){activeSources.delete(index);setHit(index,false)}}};setHit(index,true);triggerVideo(index,duration/rate);if(capture&&recording&&currentLayer&&ctx.currentTime>=recordStart){
+function playPad(index,capture=false,velocity=1){if(!buffer||!pads[index])return;ensureAudio();if(monoChoke)stopAllLiveSources();const slice=pads[index],duration=Math.max(.02,slice.end-slice.start),rate=getPlaybackRate(),source=makeSource(index,masterGain,0,duration,rate,velocity);if(!source)return;let group=activeSources.get(index);if(!group){group=new Set();activeSources.set(index,group)}group.add(source);source.onended=()=>{const g=activeSources.get(index);if(g){g.delete(source);if(!g.size){activeSources.delete(index);setHit(index,false)}}};setHit(index,true);triggerVideo(index,duration/rate);if(capture&&recording&&currentLayer&&ctx.currentTime>=recordStart&&ctx.currentTime<recordEnd){
   const rawBeat=(ctx.currentTime-recordStart)/beatDuration();
   const beat=quantiseBeat(rawBeat);
   currentLayer.events.push({pad:index,beat,time:beat*beatDuration(),duration,start:slice.start,rate,velocity,sourceId:activeSourceId})
@@ -891,8 +891,9 @@ function startLoopTransport(startAt,excludeCurrent=false,modeName='play'){
   transportMode=modeName;
   nextLoopAt=startAt;
   const pump=()=>{
+    if(transportMode==='record'&&ctx.currentTime>=recordEnd){stopRecording();return}
     const horizon=ctx.currentTime+.35;
-    while(nextLoopAt<horizon){
+    while(nextLoopAt<horizon&&(transportMode!=='record'||nextLoopAt<recordEnd)){
       scheduleLoopCycle(nextLoopAt,transportExcludeCurrent);
       nextLoopAt+=loopDuration()
     }
@@ -932,6 +933,7 @@ async function startRecording(){
   const prep=ctx.currentTime+.08;
   const beat=beatDuration();
   recordStart=prep+(useCountIn?3*beat:0);
+  recordEnd=recordStart+loopDuration();
   recording=true;
   els.recordLayer.classList.add('active');
   startLoopTransport(recordStart,true,'record');
@@ -957,6 +959,7 @@ async function startRecording(){
   updateRecordCue();
   const animateRecord=()=>{
     if(!recording)return;
+    if(ctx.currentTime>=recordEnd){stopRecording();return}
     updateRecordCue();
     recordTimer=requestAnimationFrame(animateRecord)
   };
