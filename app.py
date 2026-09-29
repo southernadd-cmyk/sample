@@ -2,9 +2,25 @@ from flask import Flask, Response, jsonify, request, send_from_directory
 import os
 import requests
 import yt_dlp
+from flask_cors import CORS
 from urllib.parse import urlparse
 
 app = Flask(__name__, static_folder="static", static_url_path="/static")
+
+FRONTEND_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv(
+        "FRONTEND_ORIGINS",
+        "https://southernadd-cmyk.github.io"
+    ).split(",")
+    if origin.strip()
+]
+
+CORS(
+    app,
+    resources={r"/api/*": {"origins": FRONTEND_ORIGINS}},
+    expose_headers=["X-Track-Title"],
+)
 
 MAX_DURATION_SECONDS = 15 * 60
 
