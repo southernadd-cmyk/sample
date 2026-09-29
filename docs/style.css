@@ -72,3 +72,15 @@ body{margin:0;background:radial-gradient(circle at 30% 0,#252a25 0,#101210 48%,#
 .clock.counting{font-size:44px;line-height:1;color:var(--lime);font-weight:900;min-width:100px;text-align:center}
 
 .capture-threshold{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px;font-size:11px;color:var(--muted)}.capture-threshold input{width:75px;padding:8px}
+
+.bar-progress{margin:14px 0;padding:12px;background:#111811;border:1px solid #40523b;border-radius:8px;color:var(--lime)}
+.bar-progress-heading{display:flex;justify-content:space-between;gap:8px;font-size:12px;margin-bottom:10px;font-variant-numeric:tabular-nums}
+.bar-progress-heading>span{font-size:10px;color:var(--muted)}
+.beat-track{position:relative;height:40px;overflow:hidden;background:#202b1d;border:1px solid #56684a;border-radius:4px}
+.bar-fill{position:absolute;inset:0 auto 0 0;background:#759b3d;opacity:.35}
+.beat-cells{position:absolute;inset:0;display:grid;grid-template-columns:repeat(4,1fr)}
+.beat-cells span{display:grid;place-items:center;border-right:1px solid #56684a;font-size:18px;font-weight:900}
+.beat-cells span:last-child{border:0}.beat-cells .current{background:#a2cb5430;color:#e4ffc0}
+.bar-playhead{position:absolute;top:0;bottom:0;width:3px;background:#e4ffc0;box-shadow:0 0 8px #a2cb54}
+.loop-bar-markers{display:flex;gap:4px;margin-top:8px}.loop-bar-markers span{flex:1;text-align:center;font-size:9px;padding:5px 0;background:#202b1d;border-radius:3px;color:var(--muted)}
+.loop-bar-markers .current{background:#668934;color:#fff}.is-recording{border-color:#c95b50}.is-recording .bar-playhead{background:#ff8a7f;box-shadow:0 0 8px #ff8a7f}
