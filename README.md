@@ -1,6 +1,6 @@
 # Sample — browser MPC-style sampler
 
-A 16-pad browser sampler that can load audio from a YouTube URL, split the track into 16 equal chops, and play those chops from the computer keyboard.
+A browser-based 16-pad sampler that can import a YouTube track, chop it across pads, capture pad performances in layers and export the finished performance as a WAV.
 
 ## Keyboard layout
 
@@ -11,20 +11,35 @@ A  S  D  F
 Z  X  C  V
 ```
 
-Pads can also be clicked/tapped.
-
 ## Features
 
-- YouTube URL import
+- YouTube URL import through the Flask backend
 - local audio-file import
 - 16 automatic equal slices
-- keyboard-triggered pads
+- keyboard and mouse/touch pads
 - waveform display with slice markers
-- one-shot and gate playback modes
-- mono choke on/off
-- master volume
 - per-pad start/end nudging
-- responsive UI
+- one-shot and gate playback
+- mono choke on/off
+- performance recording
+- unlimited overdub layers for a session
+- mute, solo and delete individual layers
+- playback of the complete layered mix
+- client-side stereo WAV rendering/export
+- responsive MPC-style interface
+
+## Recording workflow
+
+1. Load a song.
+2. Play the pads to find the chops you want.
+3. Click **Record Layer** and perform using the keyboard/pads.
+4. Click **Stop**.
+5. Click **Record Layer** again to overdub. Existing active layers play while the new layer is recorded.
+6. Mute, solo or delete layers as required.
+7. Click **Play Mix** to preview the arrangement.
+8. Click **Export WAV** to render and download the combined performance.
+
+The browser stores the performance as timed pad-trigger events. WAV export uses an OfflineAudioContext, so no server-side audio rendering is needed.
 
 ## Run locally
 
@@ -40,31 +55,27 @@ Open http://localhost:5000
 
 ## Railway
 
-This repository is ready for Railway:
-
 1. Create a Railway project.
 2. Deploy from this GitHub repository.
-3. Railway will install `requirements.txt`.
+3. Railway installs `requirements.txt`.
 4. The `Procfile` starts Gunicorn.
-5. No environment variables are required for the first prototype.
+5. No environment variables are required for the prototype.
 
 ## Why GitHub Pages alone is not enough
 
-The sampler UI is ordinary HTML/CSS/JavaScript, but importing audio from an arbitrary YouTube URL cannot reliably be done directly in the browser because the media request is restricted and YouTube does not expose a browser-friendly audio-download API for this purpose.
-
-The Flask endpoint uses `yt-dlp` server-side to resolve the audio stream, then streams it back to the sampler.
+The sampler itself is browser-side, but reliable YouTube audio resolving requires a backend. Flask + `yt-dlp` resolves the media stream and sends it to the browser. The pad engine, layering and WAV export then all happen locally in the browser.
 
 ## Important
 
-Use source material you have the right or permission to sample. YouTube may also change its delivery mechanisms, so URL importing can occasionally require a `yt-dlp` update.
+Use source material you have permission or a legal right to sample. YouTube delivery can change over time, so URL import may occasionally require updating `yt-dlp`.
 
-## Next ideas
+## Strong next additions
 
-- transient/onset detection instead of equal slices
-- draggable slice markers
+- transient/onset detection instead of equal divisions
+- draggable chop markers
+- BPM detection and metronome
+- quantisation and swing
+- loop length / bar-based recording
 - pad banks A–D
-- pitch/tune per pad
-- filter and envelope controls
-- sequence recorder / step sequencer
-- swing and BPM
-- export a chopped sample pack
+- pitch, filter and envelope per pad
+- save/load projects
