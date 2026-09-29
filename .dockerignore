@@ -1,0 +1,9 @@
+.git
+.github
+docs
+static
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.env
