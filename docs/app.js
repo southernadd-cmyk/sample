@@ -796,6 +796,18 @@ function playPad(index,capture=false,velocity=1){if(!buffer||!pads[index])return
 }}
 function stopPad(index){const group=activeSources.get(index);if(!group)return;for(const source of group){try{source.stop()}catch{}}activeSources.delete(index);setHit(index,false)}
 function stopAllLiveSources(){for(const[index,group]of activeSources){for(const source of group){try{source.stop()}catch{}}setHit(index,false)}activeSources.clear()}
+// Match the visual cursor to audio reaching the output, rather than audio queued ahead.
+function audibleAudioTime(){
+  if(!ctx)return 0;
+  if(typeof ctx.getOutputTimestamp==='function'){
+    const stamp=ctx.getOutputTimestamp();
+    if(stamp.contextTime>0&&stamp.performanceTime>0){
+      return Math.min(ctx.currentTime,stamp.contextTime+Math.max(0,performance.now()-stamp.performanceTime)/1000)
+    }
+  }
+  return Math.max(0,ctx.currentTime-(ctx.outputLatency||0)-(ctx.baseLatency||0))
+}
+
 function updateBarProgress(elapsed=0,state='STOPPED'){
   const panel=document.querySelector('#barProgress');
   if(!panel)return;
@@ -826,7 +838,7 @@ function stopScheduled(){
   for(const n of metroNodes){try{n.stop()}catch{}}
   metroNodes=[];
   if(loopScheduler){clearInterval(loopScheduler);loopScheduler=null}
-  if(mixTimer){clearInterval(mixTimer);mixTimer=null}
+  if(mixTimer){cancelAnimationFrame(mixTimer);mixTimer=null}
   if(countInTimer){clearTimeout(countInTimer);countInTimer=null}
   transportMode=null;
   updateBarProgress()
@@ -925,24 +937,30 @@ async function startRecording(){
   startLoopTransport(recordStart,true,'record');
   if(useCountIn)scheduleCountIn(prep,voices);
   const updateRecordCue=()=>{
-    const remaining=recordStart-ctx.currentTime;
+    const now=audibleAudioTime();
+    const remaining=recordStart-now;
     if(remaining>0){
-      const number=Math.max(1,Math.min(3,3-Math.floor((ctx.currentTime-prep)/beat)));
+      const number=Math.max(1,Math.min(3,3-Math.floor((now-prep)/beat)));
       updateBarProgress(0,'COUNT-IN');
       els.recordStatus.textContent='GET READY — '+number;
       els.recordClock.textContent=String(number);
       els.recordClock.classList.add('counting')
     }else{
-      updateBarProgress(ctx.currentTime-recordStart,'RECORDING');
+      updateBarProgress(now-transportStart,'RECORDING');
       els.recordStatus.textContent='RECORDING '+currentLayer.name.toUpperCase();
-      const pos=((ctx.currentTime-recordStart)%loopDuration()+loopDuration())%loopDuration();
-      const showGo=useCountIn&&ctx.currentTime-recordStart<beat;
+      const pos=((now-transportStart)%loopDuration()+loopDuration())%loopDuration();
+      const showGo=useCountIn&&now-recordStart<beat;
       els.recordClock.textContent=showGo?'GO!':formatClock(pos);
       els.recordClock.classList.toggle('counting',showGo)
     }
   };
   updateRecordCue();
-  recordTimer=setInterval(updateRecordCue,25);
+  const animateRecord=()=>{
+    if(!recording)return;
+    updateRecordCue();
+    recordTimer=requestAnimationFrame(animateRecord)
+  };
+  recordTimer=requestAnimationFrame(animateRecord);
   renderLayers();
   setMessage('Loop recording armed. Hits are '+((els.quantise?.value||'off')==='off'?'unquantised':('quantised to 1/'+els.quantise.value))+'.')
 }
@@ -951,7 +969,7 @@ function stopRecording(){
   if(!recording)return;
   recording=false;
   els.recordLayer.classList.remove('active');
-  if(recordTimer){clearInterval(recordTimer);recordTimer=null}
+  if(recordTimer){cancelAnimationFrame(recordTimer);recordTimer=null}
   stopScheduled();
   els.recordClock.classList.remove('counting');
   const empty=currentLayer&&currentLayer.events.length===0;
@@ -968,11 +986,14 @@ function playMix(){
   mixStart=ctx.currentTime+.08;
   startLoopTransport(mixStart,false,'play');
   els.recordStatus.textContent='LOOPING MIX';
-  mixTimer=setInterval(()=>{
-    const pos=((ctx.currentTime-mixStart)%loopDuration()+loopDuration())%loopDuration();
-    els.recordClock.textContent=formatClock(pos);
-    updateBarProgress(ctx.currentTime-mixStart,ctx.currentTime>=mixStart?'PLAYING':'PREPARING')
-  },50)
+  const animateMix=()=>{
+    if(transportMode!=='play')return;
+    const now=audibleAudioTime(),elapsed=Math.max(0,now-transportStart);
+    els.recordClock.textContent=formatClock(elapsed%loopDuration());
+    updateBarProgress(elapsed,now>=transportStart?'PLAYING':'PREPARING');
+    mixTimer=requestAnimationFrame(animateMix)
+  };
+  animateMix()
 }
 function renderLayers(){els.layers.innerHTML='';if(!layers.length){els.layers.innerHTML='<div class="empty-layer">No recorded layers yet.</div>';return}layers.forEach(layer=>{const row=document.createElement('div');row.className='layer'+(layer.muted?' muted':'');row.innerHTML='<div class="layer-meta"><span class="layer-name">'+layer.name+'</span><span class="layer-source">'+(layer.sourceTitle||'Sample source')+'</span><span class="layer-events">'+layer.events.length+' hits</span></div><button data-action="mute">'+(layer.muted?'UNMUTE':'MUTE')+'</button><button data-action="solo">SOLO</button><button data-action="delete">DELETE</button>';row.querySelector('[data-action="mute"]').onclick=()=>{layer.muted=!layer.muted;renderLayers();markProjectDirty()};row.querySelector('[data-action="solo"]').onclick=()=>{layers.forEach(l=>l.muted=l!==layer);renderLayers();markProjectDirty()};row.querySelector('[data-action="delete"]').onclick=()=>{layers=layers.filter(l=>l!==layer);renderLayers();els.recordClock.textContent=formatClock(mixDuration());markProjectDirty()};els.layers.appendChild(row)})}
 
