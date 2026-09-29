@@ -68,3 +68,5 @@ body{margin:0;background:radial-gradient(circle at 30% 0,#252a25 0,#101210 48%,#
 .project-load-row{grid-template-columns:minmax(0,1fr) auto auto;margin-top:8px}
 .project-row button{white-space:nowrap}
 @media(max-width:700px){.project-head{align-items:flex-start;flex-direction:column}.project-hint{text-align:left}.project-row,.project-load-row{grid-template-columns:1fr}.project-row button{width:100%}}
+
+.clock.counting{font-size:44px;line-height:1;color:var(--lime);font-weight:900;min-width:100px;text-align:center}

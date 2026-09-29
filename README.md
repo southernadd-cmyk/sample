@@ -79,3 +79,7 @@ Use source material you have permission or a legal right to sample. YouTube deli
 - pad banks A–D
 - pitch, filter and envelope per pad
 - save/load projects
+
+## GitHub Pages voice count-in
+
+The browser recorder counts aloud **3, 2, 1, GO**, one cue per beat at the target BPM. Recording starts exactly on GO. The clock displays the same cues, then the loop position. Turning voice count-in off starts without the countdown. Voice cues are scheduled through Web Audio for consistent timing, cancel on Stop, and are not included in recorded layer events or the exported WAV. If the audio assets cannot load, visual cues and clicks remain available. The short synthetic voice clips in `docs/audio` were generated using CMU Flite (SLT voice).

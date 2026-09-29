@@ -12,6 +12,16 @@ let captureRecorder=null,captureStream=null,captureChunks=[],captureTimer=null,c
 let midiAccess=null,midiInput=null,midiLearning=false,midiLearnPad=0,midiHeld=new Map();
 let midiMap=new Map(Array.from({length:16},(_,i)=>[36+i,i]));
 let projectDbPromise=null,currentProjectName='',projectDirty=false;
+let countInVoicePromise=null,recordArm=0,recordArming=false;
+
+function loadCountInVoice(){
+  if(!countInVoicePromise)countInVoicePromise=Promise.all(['three','two','one','go'].map(async word=>{
+    const response=await fetch('audio/'+word+'.wav');
+    if(!response.ok)throw new Error('Count-in voice unavailable');
+    return ctx.decodeAudioData(await response.arrayBuffer())
+  })).catch(err=>{countInVoicePromise=null;throw err});
+  return countInVoicePromise
+}
 
 function ensureAudio(){if(!ctx){ctx=new(window.AudioContext||window.webkitAudioContext)();masterGain=ctx.createGain();masterGain.gain.value=Number(els.master.value);masterGain.connect(ctx.destination)}if(ctx.state==='suspended')ctx.resume()}
 function formatTime(s){if(!Number.isFinite(s))return'--:--';const m=Math.floor(s/60),sec=Math.floor(s%60).toString().padStart(2,'0');return m+':'+sec}
@@ -117,7 +127,7 @@ function updateGrooveUi(){
   els.metronome?.classList.toggle('active',metronomeOn);
   if(els.metronome)els.metronome.textContent='METRONOME: '+(metronomeOn?'ON':'OFF');
   els.countIn?.classList.toggle('active',countInOn);
-  if(els.countIn)els.countIn.textContent=countInOn?'COUNT-IN: 1 BAR':'COUNT-IN: OFF'
+  if(els.countIn)els.countIn.textContent=countInOn?'VOICE COUNT-IN: ON':'VOICE COUNT-IN: OFF'
 }
 function detectBpm(audioBuffer){
   try{
@@ -738,6 +748,7 @@ function playPad(index,capture=false,velocity=1){if(!buffer||!pads[index])return
 function stopPad(index){const group=activeSources.get(index);if(!group)return;for(const source of group){try{source.stop()}catch{}}activeSources.delete(index);setHit(index,false)}
 function stopAllLiveSources(){for(const[index,group]of activeSources){for(const source of group){try{source.stop()}catch{}}setHit(index,false)}activeSources.clear()}
 function stopScheduled(){
+  recordArm++;recordArming=false;
   for(const s of scheduledSources){try{s.stop()}catch{}}
   scheduledSources=[];
   for(const n of metroNodes){try{n.stop()}catch{}}
@@ -804,48 +815,69 @@ function startLoopTransport(startAt,excludeCurrent=false,modeName='play'){
   pump();
   loopScheduler=setInterval(pump,60)
 }
-function scheduleCountIn(startAt){
+function scheduleCountIn(startAt,voices){
   const beat=beatDuration();
-  for(let i=0;i<4;i++)scheduleClick(startAt+i*beat,i===0)
+  for(let i=0;i<4;i++){
+    const when=startAt+i*beat;
+    if(!voices){scheduleClick(when,i===3);continue}
+    const source=ctx.createBufferSource(),gain=ctx.createGain();
+    source.buffer=voices[i];
+    source.playbackRate.value=Math.max(1,voices[i].duration/(beat*.85));
+    gain.gain.value=.8;
+    source.connect(gain);gain.connect(ctx.destination);
+    source.start(when);metroNodes.push(source)
+  }
 }
-function startRecording(){
+async function startRecording(){
   if(!buffer)return setMessage('Capture a sample first.',true);
-  if(recording)return;
+  if(recording||recordArming)return;
   ensureAudio();stopScheduled();
+  const arm=recordArm,useCountIn=countInOn;
+  recordArming=true;
+  let voices=null;
+  if(useCountIn){
+    els.recordStatus.textContent='PREPARING VOICE COUNT-IN';
+    try{voices=await loadCountInVoice()}catch(err){console.warn(err);setMessage('Voice unavailable. Follow the visual 3, 2, 1, GO and clicks.',true)}
+  }
+  if(arm!==recordArm)return;
+  recordArming=false;
   currentLayer={id:Date.now(),name:'Layer '+(layers.length+1),muted:false,sourceId:activeSourceId,sourceTitle:activeSource()?.title||'Unknown source',events:[]};
   layers.push(currentLayer);
   const prep=ctx.currentTime+.08;
-  recordStart=prep+(countInOn?4*beatDuration():0);
+  const beat=beatDuration();
+  recordStart=prep+(useCountIn?3*beat:0);
   recording=true;
   els.recordLayer.classList.add('active');
-  if(countInOn){
-    scheduleCountIn(prep);
-    els.recordStatus.textContent='COUNT-IN';
-    countInTimer=setTimeout(()=>{
-      if(recording)els.recordStatus.textContent='RECORDING '+currentLayer.name.toUpperCase()
-    },Math.max(0,(recordStart-ctx.currentTime)*1000))
-  }else{
-    els.recordStatus.textContent='RECORDING '+currentLayer.name.toUpperCase()
-  }
   startLoopTransport(recordStart,true,'record');
-  recordTimer=setInterval(()=>{
+  if(useCountIn)scheduleCountIn(prep,voices);
+  const updateRecordCue=()=>{
     const remaining=recordStart-ctx.currentTime;
     if(remaining>0){
-      els.recordClock.textContent='-'+formatClock(remaining)
+      const number=Math.max(1,Math.min(3,3-Math.floor((ctx.currentTime-prep)/beat)));
+      els.recordStatus.textContent='GET READY — '+number;
+      els.recordClock.textContent=String(number);
+      els.recordClock.classList.add('counting')
     }else{
+      els.recordStatus.textContent='RECORDING '+currentLayer.name.toUpperCase();
       const pos=((ctx.currentTime-recordStart)%loopDuration()+loopDuration())%loopDuration();
-      els.recordClock.textContent=formatClock(pos)
+      const showGo=useCountIn&&ctx.currentTime-recordStart<beat;
+      els.recordClock.textContent=showGo?'GO!':formatClock(pos);
+      els.recordClock.classList.toggle('counting',showGo)
     }
-  },50);
+  };
+  updateRecordCue();
+  recordTimer=setInterval(updateRecordCue,25);
   renderLayers();
   setMessage('Loop recording armed. Hits are '+((els.quantise?.value||'off')==='off'?'unquantised':('quantised to 1/'+els.quantise.value))+'.')
 }
 function stopRecording(){
+  if(recordArming){stopScheduled();els.recordStatus.textContent='READY TO RECORD';return}
   if(!recording)return;
   recording=false;
   els.recordLayer.classList.remove('active');
   if(recordTimer){clearInterval(recordTimer);recordTimer=null}
   stopScheduled();
+  els.recordClock.classList.remove('counting');
   const empty=currentLayer&&currentLayer.events.length===0;
   if(empty)layers=layers.filter(l=>l!==currentLayer);
   currentLayer=null;
