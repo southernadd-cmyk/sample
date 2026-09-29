@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sample — MPC-style browser sampler</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div>
+        <div class="eyebrow">SAMPLE / 16 PAD CHOPPER</div>
+        <h1>Browser MPC</h1>
+      </div>
+      <div id="audioState" class="status">NO SAMPLE</div>
+    </header>
+
+    <section class="loader panel">
+      <label for="youtubeUrl">YouTube URL</label>
+      <div class="load-row">
+        <input id="youtubeUrl" type="url" placeholder="https://www.youtube.com/watch?v=…" autocomplete="off">
+        <button id="loadYoutube" class="primary">LOAD + CHOP</button>
+      </div>
+      <div class="or"><span>or</span></div>
+      <div class="file-row">
+        <label class="file-button">LOAD LOCAL MEDIA<input id="audioFile" type="file" accept="audio/*,video/*"></label>
+        <span class="hint">Audio is sampled into 16 slices. Video files can also drive the visual playback. Use media you have permission to sample.</span>
+      </div>
+      <div id="message" class="message" aria-live="polite"></div>
+    </section>
+
+    <section class="workspace">
+      <div class="left panel">
+        <div id="videoPanel" class="video-panel hidden" aria-hidden="true">
+          <div class="video-head">
+            <span>VIDEO PLAYBACK</span>
+            <span id="videoStatus">NO VIDEO</span>
+          </div>
+          <div class="video-stage">
+            <div id="youtubePlayer"></div>
+            <video id="localVideo" muted playsinline preload="metadata"></video>
+            <div id="videoPlaceholder" class="video-placeholder">LOAD A YOUTUBE URL OR LOCAL VIDEO</div>
+          </div>
+        </div>
+
+        <div class="screen">
+          <div class="screen-meta">
+            <span id="trackTitle">NO TRACK LOADED</span>
+            <span id="duration">--:--</span>
+          </div>
+          <canvas id="waveform" width="960" height="260"></canvas>
+          <div class="screen-footer">
+            <span>16 SLICES • DRAG MARKERS TO RE-CHOP</span>
+            <span id="selectedInfo">PAD 01</span>
+          </div>
+        </div>
+
+        <div class="controls">
+          <label>MASTER<input id="masterVolume" type="range" min="0" max="1.2" value="0.9" step="0.01"></label>
+          <button id="autoChop" class="toggle">AUTO CHOP: TRANSIENTS</button>
+          <button id="equalChop" class="toggle">EQUAL 16</button>
+          <button id="videoMode" class="toggle">VIDEO MODE: OFF</button>
+          <button id="modeBtn" class="toggle" data-mode="oneshot">MODE: ONE SHOT</button>
+          <button id="chokeBtn" class="toggle active" aria-pressed="true">MONO CHOKE: ON</button>
+          <button id="stopAll" class="danger">STOP ALL</button>
+        </div>
+
+        <div class="edit">
+          <div><strong id="editPad">PAD 01</strong><span id="editTime">0.00s — 0.00s</span></div>
+          <div class="edit-buttons">
+            <button data-nudge="start:-0.05">START -</button>
+            <button data-nudge="start:0.05">START +</button>
+            <button data-nudge="end:-0.05">END -</button>
+            <button data-nudge="end:0.05">END +</button>
+            <button id="resetSlice">RESET SLICE</button>
+          </div>
+        </div>
+
+        <section class="recorder">
+          <div class="recorder-head">
+            <div>
+              <div class="section-label">PERFORMANCE RECORDER</div>
+              <strong id="recordStatus">READY TO RECORD</strong>
+            </div>
+            <div id="recordClock" class="clock">00:00.0</div>
+          </div>
+          <div class="transport">
+            <button id="recordLayer" class="record">● RECORD LAYER</button>
+            <button id="stopRecord">■ STOP</button>
+            <button id="playLayers">▶ PLAY MIX</button>
+            <button id="stopLayers">■ STOP MIX</button>
+            <button id="exportWav" class="export">⇩ EXPORT WAV</button>
+          </div>
+          <div id="layers" class="layers">
+            <div class="empty-layer">No recorded layers yet.</div>
+          </div>
+        </section>
+      </div>
+
+      <div class="pads panel" id="pads" aria-label="16 sample pads"></div>
+    </section>
+
+    <footer>Keyboard: <strong>1 2 3 4 / Q W E R / A S D F / Z X C V</strong></footer>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>
