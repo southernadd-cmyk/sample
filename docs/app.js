@@ -1,10 +1,11 @@
 const API_BASE=(window.SAMPLER_API_BASE || 'https://sample-production-df5c.up.railway.app').replace(/\/$/, '');
 const keys=['1','2','3','4','q','w','e','r','a','s','d','f','z','x','c','v'];
-const els={pads:document.querySelector('#pads'),url:document.querySelector('#youtubeUrl'),loadYoutube:document.querySelector('#loadYoutube'),file:document.querySelector('#audioFile'),message:document.querySelector('#message'),title:document.querySelector('#trackTitle'),duration:document.querySelector('#duration'),waveform:document.querySelector('#waveform'),selectedInfo:document.querySelector('#selectedInfo'),editPad:document.querySelector('#editPad'),editTime:document.querySelector('#editTime'),master:document.querySelector('#masterVolume'),modeBtn:document.querySelector('#modeBtn'),chokeBtn:document.querySelector('#chokeBtn'),stopAll:document.querySelector('#stopAll'),resetSlice:document.querySelector('#resetSlice'),audioState:document.querySelector('#audioState'),autoChop:document.querySelector('#autoChop'),equalChop:document.querySelector('#equalChop'),recordLayer:document.querySelector('#recordLayer'),stopRecord:document.querySelector('#stopRecord'),playLayers:document.querySelector('#playLayers'),stopLayers:document.querySelector('#stopLayers'),exportWav:document.querySelector('#exportWav'),layers:document.querySelector('#layers'),recordStatus:document.querySelector('#recordStatus'),recordClock:document.querySelector('#recordClock'),videoMode:document.querySelector('#videoMode'),videoPanel:document.querySelector('#videoPanel'),videoStatus:document.querySelector('#videoStatus'),youtubePlayer:document.querySelector('#youtubePlayer'),localVideo:document.querySelector('#localVideo'),videoPlaceholder:document.querySelector('#videoPlaceholder')};
+const els={pads:document.querySelector('#pads'),url:document.querySelector('#youtubeUrl'),loadYoutube:document.querySelector('#loadYoutube'),file:document.querySelector('#audioFile'),message:document.querySelector('#message'),title:document.querySelector('#trackTitle'),duration:document.querySelector('#duration'),waveform:document.querySelector('#waveform'),selectedInfo:document.querySelector('#selectedInfo'),editPad:document.querySelector('#editPad'),editTime:document.querySelector('#editTime'),master:document.querySelector('#masterVolume'),modeBtn:document.querySelector('#modeBtn'),chokeBtn:document.querySelector('#chokeBtn'),stopAll:document.querySelector('#stopAll'),resetSlice:document.querySelector('#resetSlice'),audioState:document.querySelector('#audioState'),autoChop:document.querySelector('#autoChop'),equalChop:document.querySelector('#equalChop'),recordLayer:document.querySelector('#recordLayer'),stopRecord:document.querySelector('#stopRecord'),playLayers:document.querySelector('#playLayers'),stopLayers:document.querySelector('#stopLayers'),exportWav:document.querySelector('#exportWav'),layers:document.querySelector('#layers'),recordStatus:document.querySelector('#recordStatus'),recordClock:document.querySelector('#recordClock'),videoMode:document.querySelector('#videoMode'),videoPanel:document.querySelector('#videoPanel'),videoStatus:document.querySelector('#videoStatus'),youtubePlayer:document.querySelector('#youtubePlayer'),localVideo:document.querySelector('#localVideo'),videoPlaceholder:document.querySelector('#videoPlaceholder'),captureYoutube:document.querySelector('#captureYoutube'),stopCapture:document.querySelector('#stopCapture')};
 let ctx,masterGain,buffer=null,pads=[],selectedPad=0,mode='oneshot',monoChoke=true;
 let activeSources=new Map(),scheduledSources=[],dragMarker=-1;
 let layers=[],recording=false,currentLayer=null,recordStart=0,recordTimer=null,mixStart=0,mixTimer=null;
 let videoMode=false,videoKind=null,youtubeVideoId=null,youtubePlayer=null,youtubeReady=false,videoStopTimer=null,localVideoUrl=null;
+let captureRecorder=null,captureStream=null,captureChunks=[],captureTimer=null,captureStopping=false;
 
 function ensureAudio(){if(!ctx){ctx=new(window.AudioContext||window.webkitAudioContext)();masterGain=ctx.createGain();masterGain.gain.value=Number(els.master.value);masterGain.connect(ctx.destination)}if(ctx.state==='suspended')ctx.resume()}
 function formatTime(s){if(!Number.isFinite(s))return'--:--';const m=Math.floor(s/60),sec=Math.floor(s%60).toString().padStart(2,'0');return m+':'+sec}
@@ -24,6 +25,10 @@ function youtubeIdFromUrl(value){
   }catch{}
   return null
 }
+function youtubeFrame(){
+  const el=document.querySelector('#youtubePlayer');
+  return el?.tagName==='IFRAME'?el:el?.querySelector?.('iframe')||null
+}
 function ensureYoutubeApi(){
   if(window.YT&&window.YT.Player)return Promise.resolve();
   return new Promise(resolve=>{
@@ -41,17 +46,17 @@ async function prepareYoutubeVideo(url){
   const id=youtubeIdFromUrl(url);if(!id)return;
   videoKind='youtube';youtubeVideoId=id;els.videoStatus.textContent='YOUTUBE READY';els.videoPlaceholder.classList.add('hidden');els.localVideo.classList.remove('active');
   await ensureYoutubeApi();
-  if(youtubePlayer&&typeof youtubePlayer.loadVideoById==='function'){youtubePlayer.cueVideoById(id);youtubePlayer.mute();youtubeReady=true;document.querySelector('#youtubePlayer iframe')?.classList.add('active');return}
+  if(youtubePlayer&&typeof youtubePlayer.loadVideoById==='function'){youtubePlayer.cueVideoById(id);youtubePlayer.mute();youtubeReady=true;youtubeFrame()?.classList.add('active');return}
   youtubePlayer=new YT.Player('youtubePlayer',{
     videoId:id,
     playerVars:{playsinline:1,controls:0,disablekb:1,rel:0,modestbranding:1},
-    events:{onReady:e=>{youtubeReady=true;e.target.mute();const f=document.querySelector('#youtubePlayer iframe');if(f)f.classList.add('active')}}
+    events:{onReady:e=>{youtubeReady=true;e.target.mute();const f=youtubeFrame();if(f)f.classList.add('active')}}
   })
 }
 function prepareLocalVideo(file){
   if(localVideoUrl)URL.revokeObjectURL(localVideoUrl);
   localVideoUrl=URL.createObjectURL(file);videoKind='local';youtubeVideoId=null;els.localVideo.src=localVideoUrl;els.localVideo.muted=true;els.localVideo.classList.add('active');
-  const f=document.querySelector('#youtubePlayer iframe');if(f)f.classList.remove('active');
+  const f=youtubeFrame();if(f)f.classList.remove('active');
   els.videoPlaceholder.classList.add('hidden');els.videoStatus.textContent='LOCAL VIDEO READY'
 }
 function stopVideo(){
@@ -71,6 +76,115 @@ function triggerVideo(index,duration){
 }
 function setVideoMode(on){
   videoMode=on;els.videoMode.classList.toggle('active',on);els.videoMode.textContent='VIDEO MODE: '+(on?'ON':'OFF');els.videoPanel.classList.toggle('hidden',!on);els.videoPanel.setAttribute('aria-hidden',String(!on));if(!on)stopVideo()
+}
+
+async function startBrowserCapture(){
+  const url=els.url.value.trim();
+  if(!url||!youtubeIdFromUrl(url))return setMessage('Paste a valid YouTube URL first.',true);
+  if(!navigator.mediaDevices?.getDisplayMedia)return setMessage('This browser does not support tab-audio capture.',true);
+  if(captureRecorder)return;
+
+  try{
+    setVideoMode(true);
+    await prepareYoutubeVideo(url);
+    setMessage('Choose "This Tab" and make sure tab audio is shared.');
+    const supported=navigator.mediaDevices.getSupportedConstraints?.()||{};
+    const audio={suppressLocalAudioPlayback:false};
+    if(supported.restrictOwnAudio)audio.restrictOwnAudio=false;
+
+    captureStream=await navigator.mediaDevices.getDisplayMedia({
+      video:true,
+      audio,
+      preferCurrentTab:true,
+      selfBrowserSurface:'include',
+      systemAudio:'include'
+    });
+
+    const audioTracks=captureStream.getAudioTracks();
+    if(!audioTracks.length){
+      captureStream.getTracks().forEach(t=>t.stop());
+      captureStream=null;
+      return setMessage('No tab audio was shared. Try again and enable "Share tab audio".',true);
+    }
+
+    const audioOnly=new MediaStream(audioTracks);
+    const mimeCandidates=['audio/webm;codecs=opus','audio/webm'];
+    const mime=mimeCandidates.find(x=>MediaRecorder.isTypeSupported?.(x))||'';
+    captureChunks=[];
+    captureStopping=false;
+    captureRecorder=new MediaRecorder(audioOnly,mime?{mimeType:mime}:undefined);
+    captureRecorder.ondataavailable=e=>{if(e.data&&e.data.size)captureChunks.push(e.data)};
+    captureRecorder.onstop=finishBrowserCapture;
+    captureStream.getVideoTracks()[0]?.addEventListener('ended',()=>stopBrowserCapture());
+
+    captureRecorder.start(500);
+    els.captureYoutube.disabled=true;
+    els.stopCapture.disabled=false;
+    els.audioState.textContent='CAPTURING';
+    setMessage('Capturing YouTube audio in this browser… click STOP CAPTURE when you have enough.');
+
+    if(youtubeReady&&youtubePlayer){
+      try{
+        youtubePlayer.unMute();
+        youtubePlayer.seekTo(0,true);
+        youtubePlayer.playVideo();
+      }catch(err){console.warn('Could not auto-start YouTube playback',err)}
+    }
+
+    captureTimer=setTimeout(()=>stopBrowserCapture(),15*60*1000);
+  }catch(err){
+    console.error(err);
+    if(captureStream){captureStream.getTracks().forEach(t=>t.stop());captureStream=null}
+    captureRecorder=null;
+    els.captureYoutube.disabled=false;
+    els.stopCapture.disabled=true;
+    els.audioState.textContent=buffer?'READY':'NO SAMPLE';
+    if(err?.name==='NotAllowedError')setMessage('Capture was cancelled or permission was denied.',true);
+    else setMessage('Could not start browser capture: '+(err?.message||err),true)
+  }
+}
+function stopBrowserCapture(){
+  if(captureStopping)return;
+  captureStopping=true;
+  if(captureTimer){clearTimeout(captureTimer);captureTimer=null}
+  if(youtubeReady&&youtubePlayer){try{youtubePlayer.pauseVideo();youtubePlayer.mute()}catch{}}
+  if(captureRecorder&&captureRecorder.state!=='inactive'){
+    try{captureRecorder.stop()}catch{}
+  }else{
+    finishBrowserCapture()
+  }
+}
+async function finishBrowserCapture(){
+  if(captureTimer){clearTimeout(captureTimer);captureTimer=null}
+  const stream=captureStream;
+  captureStream=null;
+  if(stream)stream.getTracks().forEach(t=>t.stop());
+  const recorder=captureRecorder;
+  captureRecorder=null;
+  els.captureYoutube.disabled=false;
+  els.stopCapture.disabled=true;
+
+  const chunks=captureChunks;
+  captureChunks=[];
+  if(!chunks.length){
+    captureStopping=false;
+    els.audioState.textContent=buffer?'READY':'NO SAMPLE';
+    return setMessage('No audio was captured.',true)
+  }
+
+  try{
+    const type=recorder?.mimeType||'audio/webm';
+    const blob=new Blob(chunks,{type});
+    const id=youtubeIdFromUrl(els.url.value.trim());
+    await decodeArrayBuffer(await blob.arrayBuffer(),id?'Captured YouTube '+id:'Captured YouTube');
+    setMessage('Browser capture loaded. Chop markers are ready.');
+  }catch(err){
+    console.error(err);
+    els.audioState.textContent=buffer?'READY':'NO SAMPLE';
+    setMessage('Captured audio could not be decoded.',true)
+  }finally{
+    captureStopping=false
+  }
 }
 
 function createPads(){els.pads.innerHTML='';keys.forEach((key,index)=>{const btn=document.createElement('button');btn.className='pad';btn.dataset.index=index;btn.innerHTML='<span class="num">PAD '+String(index+1).padStart(2,'0')+'</span><span class="key">'+key.toUpperCase()+'</span><span class="slice">EMPTY</span>';btn.addEventListener('pointerdown',e=>{e.preventDefault();selectPad(index);playPad(index,true)});btn.addEventListener('pointerup',()=>{if(mode==='gate')stopPad(index)});btn.addEventListener('pointerleave',()=>{if(mode==='gate')stopPad(index)});els.pads.appendChild(btn)});selectPad(0)}
@@ -116,9 +230,9 @@ async function exportWav(){if(!buffer||!layers.some(l=>!l.muted&&l.events.length
 function makeSourceOffline(offline,dest,e){const p=pads[e.pad];if(!p)return;const s=offline.createBufferSource();s.buffer=buffer;s.connect(dest);s.start(e.time,e.start??p.start,Math.max(.02,e.duration))}
 function audioBufferToWav(b){const channels=b.numberOfChannels,samples=b.length,bytes=44+samples*channels*2,ab=new ArrayBuffer(bytes),v=new DataView(ab);let o=0;const str=s=>{for(let i=0;i<s.length;i++)v.setUint8(o++,s.charCodeAt(i))},u32=n=>{v.setUint32(o,n,true);o+=4},u16=n=>{v.setUint16(o,n,true);o+=2};str('RIFF');u32(bytes-8);str('WAVE');str('fmt ');u32(16);u16(1);u16(channels);u32(b.sampleRate);u32(b.sampleRate*channels*2);u16(channels*2);u16(16);str('data');u32(samples*channels*2);const data=Array.from({length:channels},(_,c)=>b.getChannelData(c));for(let i=0;i<samples;i++)for(let c=0;c<channels;c++){const x=Math.max(-1,Math.min(1,data[c][i]));v.setInt16(o,x<0?x*32768:x*32767,true);o+=2}return ab}
 
-async function loadYouTube(){const url=els.url.value.trim();if(!url)return setMessage('Paste a YouTube URL first.',true);ensureAudio();stopAllLiveSources();stopScheduled();els.loadYoutube.disabled=true;els.audioState.textContent='LOADING';setMessage('Fetching the YouTube audio stream…');try{const res=await fetch(API_BASE+'/api/youtube',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url})});if(!res.ok){const body=await res.json().catch(()=>({}));throw new Error(body.error||'YouTube import failed.')}const title=res.headers.get('X-Track-Title')||'YouTube sample',blob=await res.blob();await decodeArrayBuffer(await blob.arrayBuffer(),title);prepareYoutubeVideo(url).catch(err=>console.warn('Video preview unavailable',err))}catch(err){console.error(err);els.audioState.textContent=buffer?'READY':'NO SAMPLE';setMessage(err.message||'Could not load that YouTube video.',true)}finally{els.loadYoutube.disabled=false}}
+async function loadYouTube(){const url=els.url.value.trim();if(!url)return setMessage('Paste a YouTube URL first.',true);if(!youtubeIdFromUrl(url))return setMessage('Paste a valid YouTube URL first.',true);prepareYoutubeVideo(url).catch(err=>console.warn('Video preview unavailable',err));ensureAudio();stopAllLiveSources();stopScheduled();els.loadYoutube.disabled=true;els.audioState.textContent='LOADING';setMessage('Fetching the YouTube audio stream…');try{const res=await fetch(API_BASE+'/api/youtube',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url})});if(!res.ok){const body=await res.json().catch(()=>({}));throw new Error(body.error||'YouTube import failed.')}const title=res.headers.get('X-Track-Title')||'YouTube sample',blob=await res.blob();await decodeArrayBuffer(await blob.arrayBuffer(),title)}catch(err){console.error(err);els.audioState.textContent=buffer?'READY':'NO SAMPLE';setMessage(err.message||'Could not load that YouTube video.',true)}finally{els.loadYoutube.disabled=false}}
 
-els.loadYoutube.addEventListener('click',loadYouTube);els.url.addEventListener('keydown',e=>{if(e.key==='Enter')loadYouTube()});els.file.addEventListener('change',async e=>{const f=e.target.files?.[0];if(!f)return;stopAllLiveSources();stopScheduled();if(f.type.startsWith('video/'))prepareLocalVideo(f);else{videoKind=null;els.videoStatus.textContent='NO VIDEO';els.videoPlaceholder.classList.remove('hidden');els.localVideo.classList.remove('active')}await decodeArrayBuffer(await f.arrayBuffer(),f.name.replace(/\.[^.]+$/,''))});els.master.addEventListener('input',()=>{if(masterGain)masterGain.gain.value=Number(els.master.value)});els.modeBtn.addEventListener('click',()=>{mode=mode==='oneshot'?'gate':'oneshot';els.modeBtn.textContent='MODE: '+(mode==='oneshot'?'ONE SHOT':'GATE')});els.chokeBtn.addEventListener('click',()=>{monoChoke=!monoChoke;els.chokeBtn.classList.toggle('active',monoChoke);els.chokeBtn.setAttribute('aria-pressed',String(monoChoke));els.chokeBtn.textContent='MONO CHOKE: '+(monoChoke?'ON':'OFF')});els.stopAll.addEventListener('click',()=>{stopAllLiveSources();stopScheduled()});els.resetSlice.addEventListener('click',()=>{const p=pads[selectedPad];if(!p)return;p.start=p.defaultStart;p.end=p.defaultEnd;updatePads();updateEditInfo()});document.querySelectorAll('[data-nudge]').forEach(btn=>btn.addEventListener('click',()=>{const p=pads[selectedPad];if(!p)return;const[edge,d]=btn.dataset.nudge.split(':'),delta=Number(d);if(edge==='start')p.start=Math.max(0,Math.min(p.end-.02,p.start+delta));else p.end=Math.min(buffer.duration,Math.max(p.start+.02,p.end+delta));updatePads();updateEditInfo()}));
+els.loadYoutube.addEventListener('click',loadYouTube);els.captureYoutube.addEventListener('click',startBrowserCapture);els.stopCapture.addEventListener('click',stopBrowserCapture);els.url.addEventListener('keydown',e=>{if(e.key==='Enter')loadYouTube()});els.file.addEventListener('change',async e=>{const f=e.target.files?.[0];if(!f)return;stopAllLiveSources();stopScheduled();if(f.type.startsWith('video/'))prepareLocalVideo(f);else{videoKind=null;els.videoStatus.textContent='NO VIDEO';els.videoPlaceholder.classList.remove('hidden');els.localVideo.classList.remove('active')}await decodeArrayBuffer(await f.arrayBuffer(),f.name.replace(/\.[^.]+$/,''))});els.master.addEventListener('input',()=>{if(masterGain)masterGain.gain.value=Number(els.master.value)});els.modeBtn.addEventListener('click',()=>{mode=mode==='oneshot'?'gate':'oneshot';els.modeBtn.textContent='MODE: '+(mode==='oneshot'?'ONE SHOT':'GATE')});els.chokeBtn.addEventListener('click',()=>{monoChoke=!monoChoke;els.chokeBtn.classList.toggle('active',monoChoke);els.chokeBtn.setAttribute('aria-pressed',String(monoChoke));els.chokeBtn.textContent='MONO CHOKE: '+(monoChoke?'ON':'OFF')});els.stopAll.addEventListener('click',()=>{stopAllLiveSources();stopScheduled()});els.resetSlice.addEventListener('click',()=>{const p=pads[selectedPad];if(!p)return;p.start=p.defaultStart;p.end=p.defaultEnd;updatePads();updateEditInfo()});document.querySelectorAll('[data-nudge]').forEach(btn=>btn.addEventListener('click',()=>{const p=pads[selectedPad];if(!p)return;const[edge,d]=btn.dataset.nudge.split(':'),delta=Number(d);if(edge==='start')p.start=Math.max(0,Math.min(p.end-.02,p.start+delta));else p.end=Math.min(buffer.duration,Math.max(p.start+.02,p.end+delta));updatePads();updateEditInfo()}));
 els.videoMode.addEventListener('click',()=>setVideoMode(!videoMode));
 els.autoChop.addEventListener('click',transientChop);
 els.equalChop.addEventListener('click',()=>{if(!buffer)return;applyBoundaries(Array.from({length:17},(_,i)=>buffer.duration*i/16),false);setMessage('Reset to 16 equal chops.')});
