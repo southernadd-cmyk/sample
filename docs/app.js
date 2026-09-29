@@ -547,7 +547,19 @@ els.loopBars.addEventListener('change',()=>{if(transportMode){const wasRecording
 els.quantise.addEventListener('change',()=>setMessage(els.quantise.value==='off'?'Quantise off.':'Quantise set to 1/'+els.quantise.value+'.'));
 els.recordLayer.addEventListener('click',startRecording);els.stopRecord.addEventListener('click',stopRecording);els.playLayers.addEventListener('click',playMix);els.stopLayers.addEventListener('click',()=>{if(recording)stopRecording();else{stopScheduled();els.recordStatus.textContent='READY TO OVERDUB';els.recordClock.textContent=formatClock(loopDuration())}});els.exportWav.addEventListener('click',exportWav);
 
-const down=new Set();window.addEventListener('keydown',e=>{const key=e.key.toLowerCase(),index=keys.indexOf(key);if(index<0||e.repeat||down.has(key))return;if(['input','textarea'].includes(document.activeElement?.tagName?.toLowerCase()))return;e.preventDefault();down.add(key);selectPad(index);playPad(index,true)});window.addEventListener('keyup',e=>{const key=e.key.toLowerCase(),index=keys.indexOf(key);down.delete(key);if(index>=0&&mode==='gate')stopPad(index)});window.addEventListener('blur',()=>{down.clear();if(mode==='gate')stopAllLiveSources()});els.waveform.addEventListener('pointerdown',e=>{if(!buffer)return;const r=els.waveform.getBoundingClientRect(),x=(e.clientX-r.left)/r.width*buffer.duration;let nearest=-1,best=Infinity;for(let i=1;i<16;i++){const d=Math.abs(pads[i].start-x);if(d<best){best=d;nearest=i}}if(best<buffer.duration*.035){dragMarker=nearest;els.waveform.setPointerCapture?.(e.pointerId)}});
+const down=new Set();window.addEventListener('keydown',e=>{
+  const tag=document.activeElement?.tagName?.toLowerCase();
+  if(['input','textarea','select'].includes(tag))return;
+  if(e.shiftKey&&e.code==='KeyR'){
+    if(e.repeat)return;
+    e.preventDefault();
+    recording?stopRecording():startRecording();
+    return
+  }
+  const key=e.key.toLowerCase(),index=keys.indexOf(key);
+  if(index<0||e.repeat||down.has(key))return;
+  e.preventDefault();down.add(key);selectPad(index);playPad(index,true)
+});window.addEventListener('keyup',e=>{const key=e.key.toLowerCase(),index=keys.indexOf(key);down.delete(key);if(index>=0&&mode==='gate')stopPad(index)});window.addEventListener('blur',()=>{down.clear();if(mode==='gate')stopAllLiveSources()});els.waveform.addEventListener('pointerdown',e=>{if(!buffer)return;const r=els.waveform.getBoundingClientRect(),x=(e.clientX-r.left)/r.width*buffer.duration;let nearest=-1,best=Infinity;for(let i=1;i<16;i++){const d=Math.abs(pads[i].start-x);if(d<best){best=d;nearest=i}}if(best<buffer.duration*.035){dragMarker=nearest;els.waveform.setPointerCapture?.(e.pointerId)}});
 els.waveform.addEventListener('pointermove',e=>{if(dragMarker<1||!buffer)return;const r=els.waveform.getBoundingClientRect(),t=Math.max(pads[dragMarker-1].start+.02,Math.min(pads[dragMarker].end-.02,(e.clientX-r.left)/r.width*buffer.duration));pads[dragMarker-1].end=t;pads[dragMarker].start=t;updatePads();updateEditInfo();drawWaveform()});
 const endDrag=()=>{dragMarker=-1};els.waveform.addEventListener('pointerup',endDrag);els.waveform.addEventListener('pointercancel',endDrag);
 window.addEventListener('resize',drawWaveform);setVideoMode(false);updateGrooveUi();renderSources();createPads();
