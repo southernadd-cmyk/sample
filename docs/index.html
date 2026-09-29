@@ -5,7 +5,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>MPCTube — YouTube MPC Sampler</title>
-  <link rel="stylesheet" href="style.css?v=20260929-2025">
+  <link rel="stylesheet" href="style.css?v=20260929-2045">
 </head>
 <body>
   <main class="shell">
@@ -67,6 +67,28 @@
           </div>
           <div id="sourcesList" class="sources-list">
             <div class="sources-empty">Captured YouTube sources will appear here.</div>
+          </div>
+        </section>
+
+        <section class="midi-panel">
+          <div class="midi-head">
+            <div>
+              <span class="section-label">MIDI</span>
+              <span id="midiStatus">NOT CONNECTED</span>
+            </div>
+            <div class="midi-actions">
+              <button id="midiConnect" class="toggle">ENABLE MIDI</button>
+              <button id="midiLearn" class="toggle" disabled>MIDI LEARN</button>
+              <button id="midiReset" class="toggle" disabled>RESET MAP</button>
+            </div>
+          </div>
+          <div class="midi-body">
+            <label>INPUT
+              <select id="midiDevice" disabled>
+                <option value="">No MIDI input</option>
+              </select>
+            </label>
+            <div id="midiMapStatus" class="midi-map-status">Default map: MIDI notes 36–51 → Pads 01–16.</div>
           </div>
         </section>
 
@@ -139,9 +161,9 @@
       <div class="pads panel" id="pads" aria-label="16 sample pads"></div>
     </section>
 
-    <footer>Keyboard pads: <strong>1 2 3 4 / Q W E R / A S D F / Z X C V</strong> &nbsp;•&nbsp; Record/Stop: <strong>SHIFT + R</strong></footer>
+    <footer>Keyboard pads: <strong>1 2 3 4 / Q W E R / A S D F / Z X C V</strong> &nbsp;•&nbsp; Record/Stop: <strong>SHIFT + R</strong> &nbsp;•&nbsp; MIDI: <strong>NOTES 36–51</strong></footer>
   </main>
   <script src="config.js?v=20260929-1915"></script>
-  <script src="app.js?v=20260929-2025"></script>
+  <script src="app.js?v=20260929-2045"></script>
 </body>
 </html>
