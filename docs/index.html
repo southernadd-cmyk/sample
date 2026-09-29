@@ -88,12 +88,33 @@
             </div>
             <div id="recordClock" class="clock">00:00.0</div>
           </div>
+          <div class="groove-controls">
+            <label>LOOP
+              <select id="loopBars">
+                <option value="1">1 BAR</option>
+                <option value="2">2 BARS</option>
+                <option value="4" selected>4 BARS</option>
+                <option value="8">8 BARS</option>
+              </select>
+            </label>
+            <label>QUANTISE
+              <select id="quantise">
+                <option value="off">OFF</option>
+                <option value="4">1/4</option>
+                <option value="8">1/8</option>
+                <option value="16" selected>1/16</option>
+                <option value="32">1/32</option>
+              </select>
+            </label>
+            <button id="metronome" class="toggle">METRONOME: OFF</button>
+            <button id="countIn" class="toggle active">COUNT-IN: 1 BAR</button>
+          </div>
           <div class="transport">
             <button id="recordLayer" class="record">● RECORD LAYER</button>
             <button id="stopRecord">■ STOP</button>
-            <button id="playLayers">▶ PLAY MIX</button>
-            <button id="stopLayers">■ STOP MIX</button>
-            <button id="exportWav" class="export">⇩ EXPORT WAV</button>
+            <button id="playLayers">▶ LOOP MIX</button>
+            <button id="stopLayers">■ STOP LOOP</button>
+            <button id="exportWav" class="export">⇩ EXPORT LOOP WAV</button>
           </div>
           <div id="layers" class="layers">
             <div class="empty-layer">No recorded layers yet.</div>
