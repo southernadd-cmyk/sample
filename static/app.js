@@ -1,13 +1,76 @@
 const keys=['1','2','3','4','q','w','e','r','a','s','d','f','z','x','c','v'];
-const els={pads:document.querySelector('#pads'),url:document.querySelector('#youtubeUrl'),loadYoutube:document.querySelector('#loadYoutube'),file:document.querySelector('#audioFile'),message:document.querySelector('#message'),title:document.querySelector('#trackTitle'),duration:document.querySelector('#duration'),waveform:document.querySelector('#waveform'),selectedInfo:document.querySelector('#selectedInfo'),editPad:document.querySelector('#editPad'),editTime:document.querySelector('#editTime'),master:document.querySelector('#masterVolume'),modeBtn:document.querySelector('#modeBtn'),chokeBtn:document.querySelector('#chokeBtn'),stopAll:document.querySelector('#stopAll'),resetSlice:document.querySelector('#resetSlice'),audioState:document.querySelector('#audioState'),autoChop:document.querySelector('#autoChop'),equalChop:document.querySelector('#equalChop'),recordLayer:document.querySelector('#recordLayer'),stopRecord:document.querySelector('#stopRecord'),playLayers:document.querySelector('#playLayers'),stopLayers:document.querySelector('#stopLayers'),exportWav:document.querySelector('#exportWav'),layers:document.querySelector('#layers'),recordStatus:document.querySelector('#recordStatus'),recordClock:document.querySelector('#recordClock')};
+const els={pads:document.querySelector('#pads'),url:document.querySelector('#youtubeUrl'),loadYoutube:document.querySelector('#loadYoutube'),file:document.querySelector('#audioFile'),message:document.querySelector('#message'),title:document.querySelector('#trackTitle'),duration:document.querySelector('#duration'),waveform:document.querySelector('#waveform'),selectedInfo:document.querySelector('#selectedInfo'),editPad:document.querySelector('#editPad'),editTime:document.querySelector('#editTime'),master:document.querySelector('#masterVolume'),modeBtn:document.querySelector('#modeBtn'),chokeBtn:document.querySelector('#chokeBtn'),stopAll:document.querySelector('#stopAll'),resetSlice:document.querySelector('#resetSlice'),audioState:document.querySelector('#audioState'),autoChop:document.querySelector('#autoChop'),equalChop:document.querySelector('#equalChop'),recordLayer:document.querySelector('#recordLayer'),stopRecord:document.querySelector('#stopRecord'),playLayers:document.querySelector('#playLayers'),stopLayers:document.querySelector('#stopLayers'),exportWav:document.querySelector('#exportWav'),layers:document.querySelector('#layers'),recordStatus:document.querySelector('#recordStatus'),recordClock:document.querySelector('#recordClock'),videoMode:document.querySelector('#videoMode'),videoPanel:document.querySelector('#videoPanel'),videoStatus:document.querySelector('#videoStatus'),youtubePlayer:document.querySelector('#youtubePlayer'),localVideo:document.querySelector('#localVideo'),videoPlaceholder:document.querySelector('#videoPlaceholder')};
 let ctx,masterGain,buffer=null,pads=[],selectedPad=0,mode='oneshot',monoChoke=true;
 let activeSources=new Map(),scheduledSources=[],dragMarker=-1;
 let layers=[],recording=false,currentLayer=null,recordStart=0,recordTimer=null,mixStart=0,mixTimer=null;
+let videoMode=false,videoKind=null,youtubeVideoId=null,youtubePlayer=null,youtubeReady=false,videoStopTimer=null,localVideoUrl=null;
 
 function ensureAudio(){if(!ctx){ctx=new(window.AudioContext||window.webkitAudioContext)();masterGain=ctx.createGain();masterGain.gain.value=Number(els.master.value);masterGain.connect(ctx.destination)}if(ctx.state==='suspended')ctx.resume()}
 function formatTime(s){if(!Number.isFinite(s))return'--:--';const m=Math.floor(s/60),sec=Math.floor(s%60).toString().padStart(2,'0');return m+':'+sec}
 function formatClock(s){const m=Math.floor(s/60).toString().padStart(2,'0'),sec=Math.floor(s%60).toString().padStart(2,'0'),t=Math.floor((s%1)*10);return m+':'+sec+'.'+t}
 function setMessage(t,e=false){els.message.textContent=t;els.message.style.color=e?'var(--red)':'var(--amber)'}
+
+
+function youtubeIdFromUrl(value){
+  try{
+    const u=new URL(value);
+    if(u.hostname==='youtu.be')return u.pathname.split('/').filter(Boolean)[0]||null;
+    if(u.hostname.includes('youtube.com')){
+      if(u.pathname==='/watch')return u.searchParams.get('v');
+      const parts=u.pathname.split('/').filter(Boolean);
+      if(['shorts','embed','live'].includes(parts[0]))return parts[1]||null;
+    }
+  }catch{}
+  return null
+}
+function ensureYoutubeApi(){
+  if(window.YT&&window.YT.Player)return Promise.resolve();
+  return new Promise(resolve=>{
+    const done=()=>resolve();
+    if(window.YT&&window.YT.Player)return done();
+    const existing=document.querySelector('script[data-youtube-api]');
+    if(!existing){
+      const s=document.createElement('script');s.src='https://www.youtube.com/iframe_api';s.dataset.youtubeApi='1';document.head.appendChild(s)
+    }
+    const prev=window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady=()=>{if(typeof prev==='function')prev();done()}
+  })
+}
+async function prepareYoutubeVideo(url){
+  const id=youtubeIdFromUrl(url);if(!id)return;
+  videoKind='youtube';youtubeVideoId=id;els.videoStatus.textContent='YOUTUBE READY';els.videoPlaceholder.classList.add('hidden');els.localVideo.classList.remove('active');
+  await ensureYoutubeApi();
+  if(youtubePlayer&&typeof youtubePlayer.loadVideoById==='function'){youtubePlayer.cueVideoById(id);youtubePlayer.mute();youtubeReady=true;document.querySelector('#youtubePlayer iframe')?.classList.add('active');return}
+  youtubePlayer=new YT.Player('youtubePlayer',{
+    videoId:id,
+    playerVars:{playsinline:1,controls:0,disablekb:1,rel:0,modestbranding:1},
+    events:{onReady:e=>{youtubeReady=true;e.target.mute();const f=document.querySelector('#youtubePlayer iframe');if(f)f.classList.add('active')}}
+  })
+}
+function prepareLocalVideo(file){
+  if(localVideoUrl)URL.revokeObjectURL(localVideoUrl);
+  localVideoUrl=URL.createObjectURL(file);videoKind='local';youtubeVideoId=null;els.localVideo.src=localVideoUrl;els.localVideo.muted=true;els.localVideo.classList.add('active');
+  const f=document.querySelector('#youtubePlayer iframe');if(f)f.classList.remove('active');
+  els.videoPlaceholder.classList.add('hidden');els.videoStatus.textContent='LOCAL VIDEO READY'
+}
+function stopVideo(){
+  if(videoStopTimer){clearTimeout(videoStopTimer);videoStopTimer=null}
+  if(videoKind==='youtube'&&youtubeReady&&youtubePlayer){try{youtubePlayer.pauseVideo()}catch{}}
+  if(videoKind==='local'){try{els.localVideo.pause()}catch{}}
+}
+function triggerVideo(index,duration){
+  if(!videoMode||!pads[index]||!videoKind)return;
+  const start=pads[index].start;stopVideo();
+  if(videoKind==='youtube'&&youtubeReady&&youtubePlayer){
+    try{youtubePlayer.mute();youtubePlayer.seekTo(start,true);youtubePlayer.playVideo()}catch{}
+  }else if(videoKind==='local'){
+    try{els.localVideo.currentTime=start;els.localVideo.play().catch(()=>{})}catch{}
+  }
+  videoStopTimer=setTimeout(stopVideo,Math.max(.05,duration)*1000)
+}
+function setVideoMode(on){
+  videoMode=on;els.videoMode.classList.toggle('active',on);els.videoMode.textContent='VIDEO MODE: '+(on?'ON':'OFF');els.videoPanel.classList.toggle('hidden',!on);els.videoPanel.setAttribute('aria-hidden',String(!on));if(!on)stopVideo()
+}
 
 function createPads(){els.pads.innerHTML='';keys.forEach((key,index)=>{const btn=document.createElement('button');btn.className='pad';btn.dataset.index=index;btn.innerHTML='<span class="num">PAD '+String(index+1).padStart(2,'0')+'</span><span class="key">'+key.toUpperCase()+'</span><span class="slice">EMPTY</span>';btn.addEventListener('pointerdown',e=>{e.preventDefault();selectPad(index);playPad(index,true)});btn.addEventListener('pointerup',()=>{if(mode==='gate')stopPad(index)});btn.addEventListener('pointerleave',()=>{if(mode==='gate')stopPad(index)});els.pads.appendChild(btn)});selectPad(0)}
 async function decodeArrayBuffer(ab,title='Sample'){ensureAudio();setMessage('Decoding audio…');try{buffer=await ctx.decodeAudioData(ab.slice(0));buildSlices();layers=[];renderLayers();els.title.textContent=title.toUpperCase();els.duration.textContent=formatTime(buffer.duration);els.audioState.textContent='READY';drawWaveform();updatePads();selectPad(0);setMessage('Ready. Hit the pads, then record layers.')}catch(err){console.error(err);setMessage('This audio format could not be decoded by the browser.',true)}}
@@ -30,7 +93,7 @@ function transientChop(){
 }
 
 function makeSource(index,destination=masterGain,when=0,durationOverride=null){if(!buffer||!pads[index])return null;const slice=pads[index],duration=Math.max(.02,durationOverride??(slice.end-slice.start)),source=(destination.context||ctx).createBufferSource();source.buffer=buffer;source.connect(destination);source.start(when,slice.start,duration);return source}
-function playPad(index,capture=false){if(!buffer||!pads[index])return;ensureAudio();if(monoChoke)stopAllLiveSources();const slice=pads[index],duration=Math.max(.02,slice.end-slice.start),source=makeSource(index,masterGain,0,duration);if(!source)return;source.onended=()=>{if(activeSources.get(index)===source)activeSources.delete(index);setHit(index,false)};activeSources.set(index,source);setHit(index,true);if(capture&&recording&&currentLayer)currentLayer.events.push({pad:index,time:Math.max(0,ctx.currentTime-recordStart),duration,start:slice.start})}
+function playPad(index,capture=false){if(!buffer||!pads[index])return;ensureAudio();if(monoChoke)stopAllLiveSources();const slice=pads[index],duration=Math.max(.02,slice.end-slice.start),source=makeSource(index,masterGain,0,duration);if(!source)return;source.onended=()=>{if(activeSources.get(index)===source)activeSources.delete(index);setHit(index,false)};activeSources.set(index,source);setHit(index,true);triggerVideo(index,duration);if(capture&&recording&&currentLayer)currentLayer.events.push({pad:index,time:Math.max(0,ctx.currentTime-recordStart),duration,start:slice.start})}
 function stopPad(index){const source=activeSources.get(index);if(!source)return;try{source.stop()}catch{}activeSources.delete(index);setHit(index,false)}
 function stopAllLiveSources(){for(const[index,source]of activeSources){try{source.stop()}catch{}setHit(index,false)}activeSources.clear()}
 function stopScheduled(){for(const s of scheduledSources){try{s.stop()}catch{}}scheduledSources=[];if(mixTimer){clearInterval(mixTimer);mixTimer=null}}
@@ -52,9 +115,10 @@ async function exportWav(){if(!buffer||!layers.some(l=>!l.muted&&l.events.length
 function makeSourceOffline(offline,dest,e){const p=pads[e.pad];if(!p)return;const s=offline.createBufferSource();s.buffer=buffer;s.connect(dest);s.start(e.time,e.start??p.start,Math.max(.02,e.duration))}
 function audioBufferToWav(b){const channels=b.numberOfChannels,samples=b.length,bytes=44+samples*channels*2,ab=new ArrayBuffer(bytes),v=new DataView(ab);let o=0;const str=s=>{for(let i=0;i<s.length;i++)v.setUint8(o++,s.charCodeAt(i))},u32=n=>{v.setUint32(o,n,true);o+=4},u16=n=>{v.setUint16(o,n,true);o+=2};str('RIFF');u32(bytes-8);str('WAVE');str('fmt ');u32(16);u16(1);u16(channels);u32(b.sampleRate);u32(b.sampleRate*channels*2);u16(channels*2);u16(16);str('data');u32(samples*channels*2);const data=Array.from({length:channels},(_,c)=>b.getChannelData(c));for(let i=0;i<samples;i++)for(let c=0;c<channels;c++){const x=Math.max(-1,Math.min(1,data[c][i]));v.setInt16(o,x<0?x*32768:x*32767,true);o+=2}return ab}
 
-async function loadYouTube(){const url=els.url.value.trim();if(!url)return setMessage('Paste a YouTube URL first.',true);ensureAudio();stopAllLiveSources();stopScheduled();els.loadYoutube.disabled=true;els.audioState.textContent='LOADING';setMessage('Fetching the YouTube audio stream…');try{const res=await fetch('/api/youtube',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url})});if(!res.ok){const body=await res.json().catch(()=>({}));throw new Error(body.error||'YouTube import failed.')}const title=res.headers.get('X-Track-Title')||'YouTube sample',blob=await res.blob();await decodeArrayBuffer(await blob.arrayBuffer(),title)}catch(err){console.error(err);els.audioState.textContent=buffer?'READY':'NO SAMPLE';setMessage(err.message||'Could not load that YouTube video.',true)}finally{els.loadYoutube.disabled=false}}
+async function loadYouTube(){const url=els.url.value.trim();if(!url)return setMessage('Paste a YouTube URL first.',true);ensureAudio();stopAllLiveSources();stopScheduled();els.loadYoutube.disabled=true;els.audioState.textContent='LOADING';setMessage('Fetching the YouTube audio stream…');try{const res=await fetch('/api/youtube',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url})});if(!res.ok){const body=await res.json().catch(()=>({}));throw new Error(body.error||'YouTube import failed.')}const title=res.headers.get('X-Track-Title')||'YouTube sample',blob=await res.blob();await decodeArrayBuffer(await blob.arrayBuffer(),title);prepareYoutubeVideo(url).catch(err=>console.warn('Video preview unavailable',err))}catch(err){console.error(err);els.audioState.textContent=buffer?'READY':'NO SAMPLE';setMessage(err.message||'Could not load that YouTube video.',true)}finally{els.loadYoutube.disabled=false}}
 
-els.loadYoutube.addEventListener('click',loadYouTube);els.url.addEventListener('keydown',e=>{if(e.key==='Enter')loadYouTube()});els.file.addEventListener('change',async e=>{const f=e.target.files?.[0];if(!f)return;stopAllLiveSources();stopScheduled();await decodeArrayBuffer(await f.arrayBuffer(),f.name.replace(/\.[^.]+$/,''))});els.master.addEventListener('input',()=>{if(masterGain)masterGain.gain.value=Number(els.master.value)});els.modeBtn.addEventListener('click',()=>{mode=mode==='oneshot'?'gate':'oneshot';els.modeBtn.textContent='MODE: '+(mode==='oneshot'?'ONE SHOT':'GATE')});els.chokeBtn.addEventListener('click',()=>{monoChoke=!monoChoke;els.chokeBtn.classList.toggle('active',monoChoke);els.chokeBtn.setAttribute('aria-pressed',String(monoChoke));els.chokeBtn.textContent='MONO CHOKE: '+(monoChoke?'ON':'OFF')});els.stopAll.addEventListener('click',()=>{stopAllLiveSources();stopScheduled()});els.resetSlice.addEventListener('click',()=>{const p=pads[selectedPad];if(!p)return;p.start=p.defaultStart;p.end=p.defaultEnd;updatePads();updateEditInfo()});document.querySelectorAll('[data-nudge]').forEach(btn=>btn.addEventListener('click',()=>{const p=pads[selectedPad];if(!p)return;const[edge,d]=btn.dataset.nudge.split(':'),delta=Number(d);if(edge==='start')p.start=Math.max(0,Math.min(p.end-.02,p.start+delta));else p.end=Math.min(buffer.duration,Math.max(p.start+.02,p.end+delta));updatePads();updateEditInfo()}));
+els.loadYoutube.addEventListener('click',loadYouTube);els.url.addEventListener('keydown',e=>{if(e.key==='Enter')loadYouTube()});els.file.addEventListener('change',async e=>{const f=e.target.files?.[0];if(!f)return;stopAllLiveSources();stopScheduled();if(f.type.startsWith('video/'))prepareLocalVideo(f);else{videoKind=null;els.videoStatus.textContent='NO VIDEO';els.videoPlaceholder.classList.remove('hidden');els.localVideo.classList.remove('active')}await decodeArrayBuffer(await f.arrayBuffer(),f.name.replace(/\.[^.]+$/,''))});els.master.addEventListener('input',()=>{if(masterGain)masterGain.gain.value=Number(els.master.value)});els.modeBtn.addEventListener('click',()=>{mode=mode==='oneshot'?'gate':'oneshot';els.modeBtn.textContent='MODE: '+(mode==='oneshot'?'ONE SHOT':'GATE')});els.chokeBtn.addEventListener('click',()=>{monoChoke=!monoChoke;els.chokeBtn.classList.toggle('active',monoChoke);els.chokeBtn.setAttribute('aria-pressed',String(monoChoke));els.chokeBtn.textContent='MONO CHOKE: '+(monoChoke?'ON':'OFF')});els.stopAll.addEventListener('click',()=>{stopAllLiveSources();stopScheduled()});els.resetSlice.addEventListener('click',()=>{const p=pads[selectedPad];if(!p)return;p.start=p.defaultStart;p.end=p.defaultEnd;updatePads();updateEditInfo()});document.querySelectorAll('[data-nudge]').forEach(btn=>btn.addEventListener('click',()=>{const p=pads[selectedPad];if(!p)return;const[edge,d]=btn.dataset.nudge.split(':'),delta=Number(d);if(edge==='start')p.start=Math.max(0,Math.min(p.end-.02,p.start+delta));else p.end=Math.min(buffer.duration,Math.max(p.start+.02,p.end+delta));updatePads();updateEditInfo()}));
+els.videoMode.addEventListener('click',()=>setVideoMode(!videoMode));
 els.autoChop.addEventListener('click',transientChop);
 els.equalChop.addEventListener('click',()=>{if(!buffer)return;applyBoundaries(Array.from({length:17},(_,i)=>buffer.duration*i/16),false);setMessage('Reset to 16 equal chops.')});
 els.recordLayer.addEventListener('click',startRecording);els.stopRecord.addEventListener('click',stopRecording);els.playLayers.addEventListener('click',playMix);els.stopLayers.addEventListener('click',()=>{stopScheduled();els.recordStatus.textContent=recording?'RECORDING':'READY TO OVERDUB'});els.exportWav.addEventListener('click',exportWav);
@@ -62,4 +126,4 @@ els.recordLayer.addEventListener('click',startRecording);els.stopRecord.addEvent
 const down=new Set();window.addEventListener('keydown',e=>{const key=e.key.toLowerCase(),index=keys.indexOf(key);if(index<0||e.repeat||down.has(key))return;if(['input','textarea'].includes(document.activeElement?.tagName?.toLowerCase()))return;e.preventDefault();down.add(key);selectPad(index);playPad(index,true)});window.addEventListener('keyup',e=>{const key=e.key.toLowerCase(),index=keys.indexOf(key);down.delete(key);if(index>=0&&mode==='gate')stopPad(index)});window.addEventListener('blur',()=>{down.clear();if(mode==='gate')stopAllLiveSources()});els.waveform.addEventListener('pointerdown',e=>{if(!buffer)return;const r=els.waveform.getBoundingClientRect(),x=(e.clientX-r.left)/r.width*buffer.duration;let nearest=-1,best=Infinity;for(let i=1;i<16;i++){const d=Math.abs(pads[i].start-x);if(d<best){best=d;nearest=i}}if(best<buffer.duration*.035){dragMarker=nearest;els.waveform.setPointerCapture?.(e.pointerId)}});
 els.waveform.addEventListener('pointermove',e=>{if(dragMarker<1||!buffer)return;const r=els.waveform.getBoundingClientRect(),t=Math.max(pads[dragMarker-1].start+.02,Math.min(pads[dragMarker].end-.02,(e.clientX-r.left)/r.width*buffer.duration));pads[dragMarker-1].end=t;pads[dragMarker].start=t;updatePads();updateEditInfo();drawWaveform()});
 const endDrag=()=>{dragMarker=-1};els.waveform.addEventListener('pointerup',endDrag);els.waveform.addEventListener('pointercancel',endDrag);
-window.addEventListener('resize',drawWaveform);createPads();
+window.addEventListener('resize',drawWaveform);setVideoMode(false);createPads();
