@@ -5,7 +5,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>MPCTube — YouTube MPC Sampler</title>
-  <link rel="stylesheet" href="style.css?v=20260929-2045">
+  <link rel="stylesheet" href="style.css?v=20260929-2115">
 </head>
 <body>
   <main class="shell">
@@ -59,6 +59,27 @@
             <span id="selectedInfo">PAD 01</span>
           </div>
         </div>
+
+        <section class="project-panel">
+          <div class="project-head">
+            <div>
+              <span class="section-label">PROJECT</span>
+              <span id="projectStatus">UNSAVED</span>
+            </div>
+            <span class="project-hint">Saved locally in this browser, including captured audio.</span>
+          </div>
+          <div class="project-row">
+            <input id="projectName" type="text" maxlength="60" value="My MPCTube Project" aria-label="Project name">
+            <button id="saveProject" class="primary">SAVE PROJECT</button>
+          </div>
+          <div class="project-row project-load-row">
+            <select id="savedProjects" aria-label="Saved projects">
+              <option value="">No saved projects</option>
+            </select>
+            <button id="loadProject" class="toggle" disabled>LOAD</button>
+            <button id="deleteProject" class="danger" disabled>DELETE</button>
+          </div>
+        </section>
 
         <section class="sources-panel">
           <div class="sources-head">
@@ -161,9 +182,9 @@
       <div class="pads panel" id="pads" aria-label="16 sample pads"></div>
     </section>
 
-    <footer>Keyboard pads: <strong>1 2 3 4 / Q W E R / A S D F / Z X C V</strong> &nbsp;•&nbsp; Record/Stop: <strong>SHIFT + R</strong> &nbsp;•&nbsp; MIDI: <strong>NOTES 36–51</strong></footer>
+    <footer>Keyboard pads: <strong>1 2 3 4 / Q W E R / A S D F / Z X C V</strong> &nbsp;•&nbsp; Record/Stop: <strong>SHIFT + R</strong> &nbsp;•&nbsp; MIDI: <strong>NOTES 36–51</strong> &nbsp;•&nbsp; Save: <strong>CTRL/CMD + S</strong></footer>
   </main>
   <script src="config.js?v=20260929-1915"></script>
-  <script src="app.js?v=20260929-2045"></script>
+  <script src="app.js?v=20260929-2115"></script>
 </body>
 </html>
