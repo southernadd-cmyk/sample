@@ -24,10 +24,7 @@
       </div>
       <div class="or"><span>or</span></div>
       <div class="file-row">
-        <label class="file-button">
-          LOAD LOCAL AUDIO
-          <input id="audioFile" type="file" accept="audio/*">
-        </label>
+        <label class="file-button">LOAD LOCAL AUDIO<input id="audioFile" type="file" accept="audio/*"></label>
         <span class="hint">Audio is split into 16 equal slices. Use audio you have permission to sample.</span>
       </div>
       <div id="message" class="message" aria-live="polite"></div>
@@ -48,20 +45,14 @@
         </div>
 
         <div class="controls">
-          <label>
-            MASTER
-            <input id="masterVolume" type="range" min="0" max="1.2" value="0.9" step="0.01">
-          </label>
+          <label>MASTER<input id="masterVolume" type="range" min="0" max="1.2" value="0.9" step="0.01"></label>
           <button id="modeBtn" class="toggle" data-mode="oneshot">MODE: ONE SHOT</button>
           <button id="chokeBtn" class="toggle active" aria-pressed="true">MONO CHOKE: ON</button>
           <button id="stopAll" class="danger">STOP ALL</button>
         </div>
 
         <div class="edit">
-          <div>
-            <strong id="editPad">PAD 01</strong>
-            <span id="editTime">0.00s — 0.00s</span>
-          </div>
+          <div><strong id="editPad">PAD 01</strong><span id="editTime">0.00s — 0.00s</span></div>
           <div class="edit-buttons">
             <button data-nudge="start:-0.05">START -</button>
             <button data-nudge="start:0.05">START +</button>
@@ -70,16 +61,33 @@
             <button id="resetSlice">RESET SLICE</button>
           </div>
         </div>
+
+        <section class="recorder">
+          <div class="recorder-head">
+            <div>
+              <div class="section-label">PERFORMANCE RECORDER</div>
+              <strong id="recordStatus">READY TO RECORD</strong>
+            </div>
+            <div id="recordClock" class="clock">00:00.0</div>
+          </div>
+          <div class="transport">
+            <button id="recordLayer" class="record">● RECORD LAYER</button>
+            <button id="stopRecord">■ STOP</button>
+            <button id="playLayers">▶ PLAY MIX</button>
+            <button id="stopLayers">■ STOP MIX</button>
+            <button id="exportWav" class="export">⇩ EXPORT WAV</button>
+          </div>
+          <div id="layers" class="layers">
+            <div class="empty-layer">No recorded layers yet.</div>
+          </div>
+        </section>
       </div>
 
       <div class="pads panel" id="pads" aria-label="16 sample pads"></div>
     </section>
 
-    <footer>
-      Keyboard: <strong>1 2 3 4 / Q W E R / A S D F / Z X C V</strong>
-    </footer>
+    <footer>Keyboard: <strong>1 2 3 4 / Q W E R / A S D F / Z X C V</strong></footer>
   </main>
-
   <script src="/static/app.js"></script>
 </body>
 </html>
