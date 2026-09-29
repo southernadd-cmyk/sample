@@ -84,3 +84,5 @@ body{margin:0;background:radial-gradient(circle at 30% 0,#252a25 0,#101210 48%,#
 .bar-playhead{position:absolute;top:0;bottom:0;width:3px;background:#e4ffc0;box-shadow:0 0 8px #a2cb54}
 .loop-bar-markers{display:flex;gap:4px;margin-top:8px}.loop-bar-markers span{flex:1;text-align:center;font-size:9px;padding:5px 0;background:#202b1d;border-radius:3px;color:var(--muted)}
 .loop-bar-markers .current{background:#668934;color:#fff}.is-recording{border-color:#c95b50}.is-recording .bar-playhead{background:#ff8a7f;box-shadow:0 0 8px #ff8a7f}
+
+.pad-workspace{min-width:0;align-self:start;display:grid;gap:12px}.pad-workspace .bar-progress{margin:0;padding:14px;background:linear-gradient(180deg,#202420,#171a17);border-radius:10px}
