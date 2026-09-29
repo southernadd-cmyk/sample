@@ -1,0 +1,52 @@
+name: Test Back4app backend
+
+on:
+  push:
+    paths:
+      - '.github/workflows/test-back4app.yml'
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Test health endpoint
+        run: |
+          set -euxo pipefail
+          curl -i -fsS --max-time 30 https://sample-s34cvyj8.b4a.run/health
+
+      - name: Test YouTube import
+        run: |
+          python - <<'PY'
+          import json, urllib.request, urllib.error
+
+          url = "https://sample-s34cvyj8.b4a.run/api/youtube"
+          payload = json.dumps({
+              "url": "https://www.youtube.com/watch?v=pgh7tT-1aJg"
+          }).encode()
+
+          req = urllib.request.Request(
+              url,
+              data=payload,
+              headers={
+                  "Content-Type": "application/json",
+                  "Origin": "https://southernadd-cmyk.github.io",
+              },
+              method="POST",
+          )
+
+          try:
+              with urllib.request.urlopen(req, timeout=90) as res:
+                  print("STATUS", res.status)
+                  print("CONTENT_TYPE", res.headers.get("Content-Type"))
+                  print("TITLE", res.headers.get("X-Track-Title"))
+                  print("CORS", res.headers.get("Access-Control-Allow-Origin"))
+                  chunk = res.read(2048)
+                  print("FIRST_BYTES", len(chunk))
+                  print("SUCCESS", res.status == 200 and len(chunk) > 0)
+          except urllib.error.HTTPError as e:
+              print("STATUS", e.code)
+              print("CONTENT_TYPE", e.headers.get("Content-Type"))
+              print("BODY", e.read(8192).decode("utf-8", "replace"))
+              raise
+          PY
