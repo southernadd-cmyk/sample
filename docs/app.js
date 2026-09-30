@@ -618,7 +618,7 @@ async function startBrowserCapture(){
     youtubePlayer.seekTo(startTime,true);
     setMessage('Choose "This Tab" and make sure tab audio is shared.');
     const supported=navigator.mediaDevices.getSupportedConstraints?.()||{};
-    const audio={suppressLocalAudioPlayback:false};
+    const audio={suppressLocalAudioPlayback:false,autoGainControl:false,echoCancellation:false,noiseSuppression:false};
     if(supported.restrictOwnAudio)audio.restrictOwnAudio=false;
 
     captureStream=await navigator.mediaDevices.getDisplayMedia({
@@ -636,6 +636,17 @@ async function startBrowserCapture(){
       return setMessage('No tab audio was shared. Try again and enable "Share tab audio".',true);
     }
 
+    // Capture music without speech-oriented level changes or noise filtering.
+    for(const track of audioTracks){
+      const processing={};
+      for(const key of ['autoGainControl','echoCancellation','noiseSuppression']){
+        if(supported[key])processing[key]=false
+      }
+      if(Object.keys(processing).length&&track.applyConstraints){
+        try{await track.applyConstraints(processing)}catch(err){console.warn('Capture processing constraints could not be applied',err)}
+      }
+      console.info('MPCTube capture audio settings',track.getSettings?.());
+    }
     const audioOnly=new MediaStream(audioTracks);
     const mimeCandidates=['audio/webm;codecs=opus','audio/webm'];
     const mime=mimeCandidates.find(x=>MediaRecorder.isTypeSupported?.(x))||'';
