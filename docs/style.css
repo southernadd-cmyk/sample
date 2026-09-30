@@ -86,3 +86,6 @@ body{margin:0;background:radial-gradient(circle at 30% 0,#252a25 0,#101210 48%,#
 .loop-bar-markers .current{background:#668934;color:#fff}.is-recording{border-color:#c95b50}.is-recording .bar-playhead{background:#ff8a7f;box-shadow:0 0 8px #ff8a7f}
 
 .pad-workspace{min-width:0;align-self:start;display:grid;gap:12px}.pad-workspace .bar-progress{margin:0;padding:14px;background:linear-gradient(180deg,#202420,#171a17);border-radius:10px}
+
+.layer{grid-template-columns:minmax(0,1fr) auto auto auto}.layer-volume{grid-column:1 / -1;grid-row:2;display:flex;gap:10px;align-items:center;font-size:10px;color:var(--muted)}.layer-volume input{flex:1;min-width:60px;accent-color:var(--lime)}.layer-volume output{min-width:4ch;text-align:right;color:var(--amber);font-variant-numeric:tabular-nums}
+@media(max-width:560px){.layer{grid-template-columns:minmax(0,1fr) auto auto auto}.layer button{padding:6px;font-size:9px}.layer button:last-child{grid-column:auto}}
