@@ -558,11 +558,11 @@ async function prepareYoutubeVideo(url){
   videoKind='youtube';youtubeVideoId=id;els.videoStatus.textContent='YOUTUBE READY';els.videoPlaceholder.classList.add('hidden');els.localVideo.classList.remove('active');
   await ensureYoutubeApi();
   if(youtubePlayer&&typeof youtubePlayer.loadVideoById==='function'){youtubePlayer.cueVideoById(id);youtubePlayer.mute();youtubeReady=true;youtubeFrame()?.classList.add('active');return}
-  youtubePlayer=new YT.Player('youtubePlayer',{
+  await new Promise(resolve=>{youtubePlayer=new YT.Player('youtubePlayer',{
     videoId:id,
     playerVars:{playsinline:1,controls:0,disablekb:1,rel:0,modestbranding:1},
-    events:{onReady:e=>{youtubeReady=true;e.target.mute();const f=youtubeFrame();if(f)f.classList.add('active')}}
-  })
+    events:{onReady:e=>{youtubeReady=true;e.target.mute();const f=youtubeFrame();if(f)f.classList.add('active');resolve()}}
+  })})
 }
 function prepareLocalVideo(file){
   if(localVideoUrl)URL.revokeObjectURL(localVideoUrl);
@@ -589,11 +589,21 @@ function setVideoMode(on){
   videoMode=on;els.videoMode.classList.toggle('active',on);els.videoMode.textContent='VIDEO MODE: '+(on?'ON':'OFF');els.videoPanel.classList.toggle('hidden',!on);els.videoPanel.setAttribute('aria-hidden',String(!on));if(!on)stopVideo()
 }
 
+function parseCaptureStart(value){
+  const text=String(value||'').trim();
+  if(!text)return 0;
+  if(!/^\d+(?:\.\d+)?$/.test(text)&&!/^\d+:\d{1,2}(?::\d{1,2})?(?:\.\d+)?$/.test(text))throw new Error('Enter a start time as seconds, MM:SS or HH:MM:SS.');
+  const parts=text.split(':').map(Number);
+  if(parts.length>1&&parts.slice(1).some(part=>part>=60))throw new Error('Minutes and seconds after a colon must be below 60.');
+  return parts.reduce((total,part)=>total*60+part,0)
+}
 async function startBrowserCapture(){
   const url=els.url.value.trim();
   if(!url||!youtubeIdFromUrl(url))return setMessage('Paste a valid YouTube URL first.',true);
   if(!navigator.mediaDevices?.getDisplayMedia)return setMessage('This browser does not support tab-audio capture.',true);
   if(captureRecorder)return;
+  let startTime;
+  try{startTime=parseCaptureStart(document.querySelector('#captureStart').value)}catch(err){return setMessage(err.message,true)}
   saveActiveSourceState();
   if(recording)stopRecording();
   else stopScheduled();
@@ -602,6 +612,10 @@ async function startBrowserCapture(){
   try{
     setVideoMode(true);
     await prepareYoutubeVideo(url);
+    youtubePlayer.pauseVideo();
+    const videoDuration=youtubePlayer.getDuration?.()||0;
+    if(videoDuration&&startTime>=videoDuration)throw new Error('Start time must be before the end of the video.');
+    youtubePlayer.seekTo(startTime,true);
     setMessage('Choose "This Tab" and make sure tab audio is shared.');
     const supported=navigator.mediaDevices.getSupportedConstraints?.()||{};
     const audio={suppressLocalAudioPlayback:false};
@@ -635,7 +649,7 @@ async function startBrowserCapture(){
     captureRecorder.start(500);
     ensureAudio();
     captureThresholdDb=Math.max(-72,Math.min(-12,Number(document.querySelector('#captureThreshold').value)||-48));
-    captureVideoOffset=0;
+    captureVideoOffset=startTime;
     captureInput=ctx.createMediaStreamSource(audioOnly);
     captureAnalyser=ctx.createAnalyser();captureAnalyser.fftSize=1024;
     captureInput.connect(captureAnalyser);
@@ -658,7 +672,7 @@ async function startBrowserCapture(){
     if(youtubeReady&&youtubePlayer){
       try{
         youtubePlayer.unMute();
-        youtubePlayer.seekTo(0,true);
+        youtubePlayer.seekTo(startTime,true);
         youtubePlayer.playVideo();
       }catch(err){console.warn('Could not auto-start YouTube playback',err)}
     }
@@ -952,9 +966,14 @@ function scheduleCountIn(startAt,voices){
     source.start(when);metroNodes.push(source)
   }
 }
+function focusPadKeyboard(){
+  els.pads.tabIndex=-1;
+  els.pads.focus({preventScroll:true})
+}
 async function startRecording(){
   if(!buffer)return setMessage('Capture a sample first.',true);
   if(recording||recordArming)return;
+  focusPadKeyboard();
   ensureAudio();stopScheduled();
   const arm=recordArm,useCountIn=countInOn;
   recordArming=true;
@@ -968,6 +987,7 @@ async function startRecording(){
   recordArming=false;
   currentLayer={id:Date.now(),name:'Layer '+(layers.length+1),volume:1,muted:false,sourceId:activeSourceId,sourceTitle:activeSource()?.title||'Unknown source',events:[]};
   layers.push(currentLayer);
+  focusPadKeyboard();
   const prep=ctx.currentTime+.08;
   const beat=beatDuration();
   recordStart=prep+(useCountIn?3*beat:0);
