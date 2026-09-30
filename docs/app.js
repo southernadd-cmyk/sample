@@ -791,9 +791,20 @@ function transientChop(){
 function makeSource(index,destination=masterGain,when=0,durationOverride=null,rateOverride=null,velocity=1){if(!buffer||!pads[index])return null;const slice=pads[index],duration=Math.max(.02,durationOverride??(slice.end-slice.start)),context=destination.context||ctx,source=context.createBufferSource(),gain=context.createGain();source.buffer=buffer;source.playbackRate.value=rateOverride??getPlaybackRate();gain.gain.value=Math.max(0,Math.min(1.2,Number(velocity)||1));source.connect(gain);gain.connect(destination);source.start(when,slice.start,duration);return source}
 function playPad(index,capture=false,velocity=1){if(!buffer||!pads[index])return;ensureAudio();if(monoChoke)stopAllLiveSources();const slice=pads[index],duration=Math.max(.02,slice.end-slice.start),rate=getPlaybackRate(),source=makeSource(index,masterGain,0,duration,rate,velocity);if(!source)return;let group=activeSources.get(index);if(!group){group=new Set();activeSources.set(index,group)}group.add(source);source.onended=()=>{const g=activeSources.get(index);if(g){g.delete(source);if(!g.size){activeSources.delete(index);setHit(index,false)}}};setHit(index,true);triggerVideo(index,duration/rate);if(capture&&recording&&currentLayer&&ctx.currentTime>=recordStart&&ctx.currentTime<recordEnd){
   const rawBeat=(ctx.currentTime-recordStart)/beatDuration();
-  const beat=quantiseBeat(rawBeat);
-  currentLayer.events.push({pad:index,beat,time:beat*beatDuration(),duration,start:slice.start,rate,velocity,sourceId:activeSourceId})
+  recordPadHit(index,rawBeat,{duration,start:slice.start,rate,velocity,sourceId:activeSourceId})
 }}
+// Preserve repeated pad strikes when quantisation would stack them at one instant.
+function recordPadHit(index,rawBeat,details){
+  const gridBeat=quantiseBeat(rawBeat);
+  const collisions=currentLayer.events.filter(e=>e.pad===index&&e.sourceId===details.sourceId&&e.gridBeat===gridBeat);
+  let beat=gridBeat;
+  if(collisions.length){
+    // Restore the performed spacing for this group instead of merging the attacks.
+    for(const event of collisions){event.beat=event.rawBeat;event.time=event.beat*beatDuration()}
+    beat=rawBeat
+  }
+  currentLayer.events.push({pad:index,rawBeat,gridBeat,beat,time:beat*beatDuration(),...details})
+}
 function stopPad(index){const group=activeSources.get(index);if(!group)return;for(const source of group){try{source.stop()}catch{}}activeSources.delete(index);setHit(index,false)}
 function stopAllLiveSources(){for(const[index,group]of activeSources){for(const source of group){try{source.stop()}catch{}}setHit(index,false)}activeSources.clear()}
 // Match the visual cursor to audio reaching the output, rather than audio queued ahead.
