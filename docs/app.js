@@ -138,12 +138,20 @@ function beatDuration(){return 60/clampBpm(els.targetBpm?.value||120)}
 function loopBars(){return Math.max(1,Number(els.loopBars?.value)||4)}
 function loopBeats(){return loopBars()*4}
 function loopDuration(){return loopBeats()*beatDuration()}
+function layerBars(layer){return Math.max(1,Number(layer?.bars)||loopBars())}
+function takeBars(){return Math.min(loopBars(),Math.max(1,Number(document.querySelector('#layerBars')?.value)||loopBars()))}
+function layerRepeats(layer){
+  const offsets=[];const duration=layerBars(layer)*4*beatDuration();
+  for(let offset=0;offset<loopDuration()-.000001;offset+=duration)offsets.push(offset);
+  return offsets
+}
 function quantiseBeat(rawBeat){
+  const beats=(recording&&currentLayer?layerBars(currentLayer)*4:loopBeats());
   const q=els.quantise?.value||'off';
-  if(q==='off')return ((rawBeat%loopBeats())+loopBeats())%loopBeats();
+  if(q==='off')return ((rawBeat%beats)+beats)%beats;
   const step=4/Number(q);
   const snapped=Math.round(rawBeat/step)*step;
-  return ((snapped%loopBeats())+loopBeats())%loopBeats()
+  return ((snapped%beats)+beats)%beats
 }
 function eventBeat(e){return e.beat!=null?e.beat:(e.time||0)/beatDuration()}
 function eventTime(e){return eventBeat(e)*beatDuration()}
@@ -246,6 +254,7 @@ function projectSnapshot(name){
     settings:{
       targetBpm:clampBpm(els.targetBpm?.value||120),
       loopBars:loopBars(),
+      layerBars:takeBars(),
       quantise:els.quantise?.value||'16',
       metronomeOn,
       countInOn,
@@ -345,6 +354,7 @@ async function loadProjectLocal(){
     const s=project.settings||{};
     els.targetBpm.value=clampBpm(s.targetBpm||120);
     els.loopBars.value=String(s.loopBars||4);
+    document.querySelector('#layerBars').value=String(s.layerBars||s.loopBars||4);
     els.quantise.value=s.quantise||'16';
     metronomeOn=!!s.metronomeOn;countInOn=s.countInOn!==false;
     mode=s.mode==='gate'?'gate':'oneshot';
@@ -849,18 +859,19 @@ function updateBarProgress(elapsed=0,state='STOPPED'){
   if(!panel)return;
   const running=state==='RECORDING'||state==='PLAYING';
   const rawBeat=Math.max(0,elapsed)/beatDuration();
-  const loopBeat=rawBeat%loopBeats();
+  const shownBars=state==='RECORDING'&&currentLayer?layerBars(currentLayer):loopBars();
+  const loopBeat=rawBeat%(shownBars*4);
   const bar=Math.floor(loopBeat/4),beat=loopBeat%4;
   const fraction=running?beat/4:0;
   panel.classList.toggle('is-recording',state==='RECORDING');
-  document.querySelector('#barPosition').textContent='BAR '+(bar+1)+' OF '+loopBars()+' · BEAT '+(Math.floor(beat)+1);
+  document.querySelector('#barPosition').textContent='BAR '+(bar+1)+' OF '+shownBars+' · BEAT '+(Math.floor(beat)+1);
   document.querySelector('#barProgressState').textContent=state;
   document.querySelector('#barFill').style.width=(fraction*100)+'%';
   document.querySelector('#barPlayhead').style.left=(fraction*100)+'%';
   panel.querySelectorAll('.beat-cells span').forEach((cell,i)=>cell.classList.toggle('current',running&&i===Math.floor(beat)));
   const markers=document.querySelector('#loopBarMarkers');
-  if(markers.children.length!==loopBars()){
-    markers.replaceChildren(...Array.from({length:loopBars()},(_,i)=>{
+  if(markers.children.length!==shownBars){
+    markers.replaceChildren(...Array.from({length:shownBars},(_,i)=>{
       const marker=document.createElement('span');marker.textContent='BAR '+(i+1);return marker
     }));
   }
@@ -915,7 +926,7 @@ function updateLayerVolume(layer){
 function recordedEventDuration(layer,event){
   const rate=event.rate||1;
   const duration=Math.max(.02,event.duration);
-  const loop=loopDuration(),at=eventTime(event);
+  const loop=layerBars(layer)*4*beatDuration(),at=eventTime(event);
   let seconds=duration/rate;
   for(const next of layer.events){
     if(!next.monoChoke)continue;
@@ -930,7 +941,8 @@ function recordedEventDuration(layer,event){
 function scheduleLayerCycle(cycleStart,excludeCurrent=false){
   for(const layer of layers){
     if(layer.muted||(excludeCurrent&&layer===currentLayer))continue;
-    for(const e of layer.events){
+    for(const offset of layerRepeats(layer))for(const e of layer.events){
+      if(offset+eventTime(e)>=loopDuration())continue;
       const src=sourceForEvent(e);
       if(!src?.buffer)continue;
       const s=ctx.createBufferSource(),gain=ctx.createGain();
@@ -938,7 +950,7 @@ function scheduleLayerCycle(cycleStart,excludeCurrent=false){
       let nodes=layerGainNodes.get(layer.id);if(!nodes){nodes=new Set();layerGainNodes.set(layer.id,nodes)}
       const entry={gain,velocity:e.velocity??1};nodes.add(entry);
       s.onended=()=>{nodes.delete(entry);if(!nodes.size)layerGainNodes.delete(layer.id)};
-      s.start(cycleStart+eventTime(e),e.start??0,recordedEventDuration(layer,e));
+      s.start(cycleStart+offset+eventTime(e),e.start??0,recordedEventDuration(layer,e));
       scheduledSources.push(s)
     }
   }
@@ -996,13 +1008,13 @@ async function startRecording(){
   }
   if(arm!==recordArm)return;
   recordArming=false;
-  currentLayer={id:Date.now(),name:'Layer '+(layers.length+1),volume:1,muted:false,sourceId:activeSourceId,sourceTitle:activeSource()?.title||'Unknown source',events:[]};
+  currentLayer={id:Date.now(),name:'Layer '+(layers.length+1),volume:1,bars:takeBars(),muted:false,sourceId:activeSourceId,sourceTitle:activeSource()?.title||'Unknown source',events:[]};
   layers.push(currentLayer);
   focusPadKeyboard();
   const prep=ctx.currentTime+.08;
   const beat=beatDuration();
   recordStart=prep+(useCountIn?3*beat:0);
-  recordEnd=recordStart+loopDuration();
+  recordEnd=recordStart+layerBars(currentLayer)*4*beatDuration();
   recording=true;
   els.recordLayer.classList.add('active');
   startLoopTransport(recordStart,true,'record');
@@ -1044,13 +1056,14 @@ function stopRecording(){
   if(recordTimer){cancelAnimationFrame(recordTimer);recordTimer=null}
   stopScheduled();
   els.recordClock.classList.remove('counting');
+  const savedBars=layerBars(currentLayer);
   const empty=currentLayer&&currentLayer.events.length===0;
   if(empty)layers=layers.filter(l=>l!==currentLayer);
   currentLayer=null;
   els.recordStatus.textContent='READY TO OVERDUB';
   els.recordClock.textContent=formatClock(loopDuration());
   renderLayers();markProjectDirty();
-  setMessage(empty?'Empty layer discarded.':'Layer saved as a '+loopBars()+'-bar loop.')
+  setMessage(empty?'Empty layer discarded.':'Saved '+savedBars+'-bar layer; repeats across the '+loopBars()+'-bar loop.')
 }
 function playMix(){
   if(!layers.some(l=>!l.muted&&l.events.length))return setMessage('Record a layer first.',true);
@@ -1072,7 +1085,7 @@ function renderLayers(){
   if(!layers.length){els.layers.innerHTML='<div class="empty-layer">No recorded layers yet.</div>';return}
   layers.forEach(layer=>{
     const row=document.createElement('div');row.className='layer'+(layer.muted?' muted':'');
-    row.innerHTML='<div class="layer-meta"><span class="layer-name">'+escapeHtml(layer.name)+'</span><span class="layer-source">'+escapeHtml(layer.sourceTitle||'Sample source')+'</span><span class="layer-events">'+layer.events.length+' hits</span></div><label class="layer-volume">VOLUME <input type="range" min="0" max="1" step="0.01" value="'+layerVolume(layer)+'" aria-label="'+escapeHtml(layer.name)+' volume"><output>'+Math.round(layerVolume(layer)*100)+'%</output></label><button data-action="mute">'+(layer.muted?'UNMUTE':'MUTE')+'</button><button data-action="solo">SOLO</button><button data-action="delete">DELETE</button>';
+    row.innerHTML='<div class="layer-meta"><span class="layer-name">'+escapeHtml(layer.name)+'</span><span class="layer-source">'+escapeHtml(layer.sourceTitle||'Sample source')+'</span><span class="layer-events">'+layer.events.length+' hits · '+layerBars(layer)+' bars</span></div><label class="layer-volume">VOLUME <input type="range" min="0" max="1" step="0.01" value="'+layerVolume(layer)+'" aria-label="'+escapeHtml(layer.name)+' volume"><output>'+Math.round(layerVolume(layer)*100)+'%</output></label><button data-action="mute">'+(layer.muted?'UNMUTE':'MUTE')+'</button><button data-action="solo">SOLO</button><button data-action="delete">DELETE</button>';
     row.querySelector('input').addEventListener('input',event=>{
       layer.volume=Number(event.target.value);
       row.querySelector('output').textContent=Math.round(layer.volume*100)+'%';
@@ -1085,8 +1098,8 @@ function renderLayers(){
   })
 }
 
-async function exportWav(){if(!buffer||!layers.some(l=>!l.muted&&l.events.length))return setMessage('Nothing recorded to export.',true);const duration=loopDuration(),sr=buffer.sampleRate,offline=new OfflineAudioContext(2,Math.ceil(duration*sr),sr),gain=offline.createGain();gain.gain.value=Number(els.master.value);gain.connect(offline.destination);for(const layer of layers){if(layer.muted)continue;for(const e of layer.events)makeSourceOffline(offline,gain,e,layer)}setMessage('Rendering '+loopBars()+'-bar loop WAV…');try{const rendered=await offline.startRendering(),wav=audioBufferToWav(rendered),blob=new Blob([wav],{type:'audio/wav'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='sample-loop-'+loopBars()+'bar-'+Math.round(clampBpm(els.targetBpm.value))+'bpm-'+new Date().toISOString().replace(/[:.]/g,'-')+'.wav';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);setMessage('Loop WAV exported.')}catch(err){console.error(err);setMessage('Could not render WAV.',true)}}
-function makeSourceOffline(offline,dest,e,layer){const src=sourceForEvent(e);if(!src?.buffer)return;const s=offline.createBufferSource(),gain=offline.createGain();s.buffer=src.buffer;s.playbackRate.value=e.rate||1;gain.gain.value=(e.velocity??1)*layerVolume(layer);s.connect(gain);gain.connect(dest);s.start(eventTime(e),e.start??0,recordedEventDuration(layer,e))}
+async function exportWav(){if(!buffer||!layers.some(l=>!l.muted&&l.events.length))return setMessage('Nothing recorded to export.',true);const duration=loopDuration(),sr=buffer.sampleRate,offline=new OfflineAudioContext(2,Math.ceil(duration*sr),sr),gain=offline.createGain();gain.gain.value=Number(els.master.value);gain.connect(offline.destination);for(const layer of layers){if(layer.muted)continue;for(const offset of layerRepeats(layer))for(const e of layer.events){if(offset+eventTime(e)<duration)makeSourceOffline(offline,gain,e,layer,offset)}}setMessage('Rendering '+loopBars()+'-bar loop WAV…');try{const rendered=await offline.startRendering(),wav=audioBufferToWav(rendered),blob=new Blob([wav],{type:'audio/wav'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='sample-loop-'+loopBars()+'bar-'+Math.round(clampBpm(els.targetBpm.value))+'bpm-'+new Date().toISOString().replace(/[:.]/g,'-')+'.wav';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);setMessage('Loop WAV exported.')}catch(err){console.error(err);setMessage('Could not render WAV.',true)}}
+function makeSourceOffline(offline,dest,e,layer,offset=0){const src=sourceForEvent(e);if(!src?.buffer)return;const s=offline.createBufferSource(),gain=offline.createGain();s.buffer=src.buffer;s.playbackRate.value=e.rate||1;gain.gain.value=(e.velocity??1)*layerVolume(layer);s.connect(gain);gain.connect(dest);s.start(offset+eventTime(e),e.start??0,recordedEventDuration(layer,e))}
 function audioBufferToWav(b){const channels=b.numberOfChannels,samples=b.length,bytes=44+samples*channels*2,ab=new ArrayBuffer(bytes),v=new DataView(ab);let o=0;const str=s=>{for(let i=0;i<s.length;i++)v.setUint8(o++,s.charCodeAt(i))},u32=n=>{v.setUint32(o,n,true);o+=4},u16=n=>{v.setUint16(o,n,true);o+=2};str('RIFF');u32(bytes-8);str('WAVE');str('fmt ');u32(16);u16(1);u16(channels);u32(b.sampleRate);u32(b.sampleRate*channels*2);u16(channels*2);u16(16);str('data');u32(samples*channels*2);const data=Array.from({length:channels},(_,c)=>b.getChannelData(c));for(let i=0;i<samples;i++)for(let c=0;c<channels;c++){const x=Math.max(-1,Math.min(1,data[c][i]));v.setInt16(o,x<0?x*32768:x*32767,true);o+=2}return ab}
 
 async function loadYouTube(){const url=els.url.value.trim();if(!url)return setMessage('Paste a YouTube URL first.',true);if(!youtubeIdFromUrl(url))return setMessage('Paste a valid YouTube URL first.',true);prepareYoutubeVideo(url).catch(err=>console.warn('Video preview unavailable',err));ensureAudio();stopAllLiveSources();stopScheduled();els.loadYoutube.disabled=true;els.audioState.textContent='LOADING';setMessage('Fetching the YouTube audio stream…');try{const res=await fetch(API_BASE+'/api/youtube',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url})});if(!res.ok){const body=await res.json().catch(()=>({}));throw new Error(body.error||'YouTube import failed.')}const title=res.headers.get('X-Track-Title')||'YouTube sample',blob=await res.blob();await decodeArrayBuffer(await blob.arrayBuffer(),title)}catch(err){console.error(err);els.audioState.textContent=buffer?'READY':'NO SAMPLE';setMessage(err.message||'Could not load that YouTube video.',true)}finally{els.loadYoutube.disabled=false}}
@@ -1136,3 +1149,5 @@ window.addEventListener('resize',drawWaveform);setVideoMode(false);updateGrooveU
 
 updateBarProgress();
 els.loopBars.addEventListener('change',()=>updateBarProgress());
+
+document.querySelector('#layerBars').addEventListener('change',()=>{if(recording)stopRecording();markProjectDirty()});
