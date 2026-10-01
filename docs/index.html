@@ -1,228 +1,217 @@
-<!doctype html>
+<!DOCTYPE html>
+
 <!-- pages-build:26 -->
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>MPCTube — YouTube MPC Sampler</title>
-  <meta name="description" content="Turn YouTube samples into beats with MPCTube. Capture audio, chop it across 16 pads, record layered loops and export your mix as WAV in your browser.">
-  <meta name="theme-color" content="#101310">
-  <link rel="canonical" href="https://southernadd-cmyk.github.io/sample/">
-  <link rel="icon" href="favicon.svg" type="image/svg+xml">
-  <link rel="icon" href="favicon.ico" sizes="16x16 32x32 48x48">
-  <link rel="apple-touch-icon" href="apple-touch-icon.png" sizes="180x180">
-  <meta property="og:type" content="website">
-  <meta property="og:site_name" content="MPCTube">
-  <meta property="og:title" content="MPCTube — Capture. Chop. Layer. Loop.">
-  <meta property="og:description" content="Turn YouTube samples into beats. Chop across 16 pads, build layered loops and export your mix as WAV — all in your browser.">
-  <meta property="og:url" content="https://southernadd-cmyk.github.io/sample/">
-  <meta property="og:image" content="https://southernadd-cmyk.github.io/sample/mpctube-social.png">
-  <meta property="og:image:type" content="image/png">
-  <meta property="og:image:width" content="1200">
-  <meta property="og:image:height" content="630">
-  <meta property="og:image:alt" content="MPCTube pad and waveform logo. Capture. Chop. Layer. Loop. Turn YouTube samples into beats and export as WAV.">
-  <meta property="og:locale" content="en_GB">
-  <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="MPCTube — Capture. Chop. Layer. Loop.">
-  <meta name="twitter:description" content="Turn YouTube samples into beats. Capture, chop, layer and export your loop as WAV in your browser.">
-  <meta name="twitter:image" content="https://southernadd-cmyk.github.io/sample/mpctube-social.png">
-  <meta name="twitter:image:alt" content="MPCTube — Capture. Chop. Layer. Loop.">
-
-  <link rel="stylesheet" href="style.css?v=20260930-layer-volume">
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>MPCTube — YouTube MPC Sampler</title>
+<meta content="Turn YouTube samples into beats with MPCTube. Capture audio, chop it across 16 pads, record layered loops and export your mix as WAV in your browser." name="description"/>
+<meta content="#101310" name="theme-color"/>
+<link href="https://southernadd-cmyk.github.io/sample/" rel="canonical"/>
+<link href="favicon.svg" rel="icon" type="image/svg+xml"/>
+<link href="favicon.ico" rel="icon" sizes="16x16 32x32 48x48"/>
+<link href="apple-touch-icon.png" rel="apple-touch-icon" sizes="180x180"/>
+<meta content="website" property="og:type"/>
+<meta content="MPCTube" property="og:site_name"/>
+<meta content="MPCTube — Capture. Chop. Layer. Loop." property="og:title"/>
+<meta content="Turn YouTube samples into beats. Chop across 16 pads, build layered loops and export your mix as WAV — all in your browser." property="og:description"/>
+<meta content="https://southernadd-cmyk.github.io/sample/" property="og:url"/>
+<meta content="https://southernadd-cmyk.github.io/sample/mpctube-social.png" property="og:image"/>
+<meta content="image/png" property="og:image:type"/>
+<meta content="1200" property="og:image:width"/>
+<meta content="630" property="og:image:height"/>
+<meta content="MPCTube pad and waveform logo. Capture. Chop. Layer. Loop. Turn YouTube samples into beats and export as WAV." property="og:image:alt"/>
+<meta content="en_GB" property="og:locale"/>
+<meta content="summary_large_image" name="twitter:card"/>
+<meta content="MPCTube — Capture. Chop. Layer. Loop." name="twitter:title"/>
+<meta content="Turn YouTube samples into beats. Capture, chop, layer and export your loop as WAV in your browser." name="twitter:description"/>
+<meta content="https://southernadd-cmyk.github.io/sample/mpctube-social.png" name="twitter:image"/>
+<meta content="MPCTube — Capture. Chop. Layer. Loop." name="twitter:image:alt"/>
+<link href="style.css?v=20261001-studio" rel="stylesheet"/>
 </head>
 <body>
-  <main class="shell">
-    <header class="topbar">
-      <div class="brand">
-        <img src="mpctube-logo.svg" alt="MPCTube" class="brand-logo">
-        <div class="brand-copy">
-          <div class="eyebrow">YOUTUBE / 16 PAD CHOPPER</div>
-          <div class="brand-tagline">Capture. Chop. Layer. Loop.</div>
-        </div>
-      </div>
-      <div id="audioState" class="status">NO SAMPLE</div>
-    </header>
-
-    <section class="loader panel">
-      <label for="youtubeUrl">YouTube URL</label>
-      <div class="load-row">
-        <input id="youtubeUrl" type="url" placeholder="https://www.youtube.com/watch?v=…" autocomplete="off">
-        <button id="captureYoutube" class="primary">CAPTURE + CHOP</button>
-        <button id="stopCapture" class="danger" disabled>STOP CAPTURE</button>
-      </div>
-      <div class="capture-row">
-        <span class="hint">Choose <strong>This Tab</strong> in Chrome and enable tab audio. Let the section you want play, then stop capture. Everything stays in your browser.</span>
-      </div>
-      <label class="capture-threshold" for="captureStart">VIDEO START TIME
-        <input id="captureStart" type="text" value="0:00" placeholder="1:30" aria-describedby="captureStartHint">
-        <span id="captureStartHint" class="hint">Seconds, MM:SS or HH:MM:SS. For example, 1:30 starts capture at 90 seconds.</span>
-      </label>
-      <label class="capture-threshold" for="captureThreshold">AUDIO START THRESHOLD
-        <input id="captureThreshold" type="number" min="-72" max="-12" step="3" value="-48"> dB
+<main class="shell">
+<header class="topbar">
+<div class="brand">
+<img alt="MPCTube" class="brand-logo" src="mpctube-logo.svg"/>
+<div class="brand-copy">
+<div class="eyebrow">CAPTURE · CHOP · PERFORM</div>
+<div class="brand-tagline">Your browser beat studio</div>
+</div>
+</div>
+<div class="status" id="audioState">NO SAMPLE</div>
+</header>
+<section class="loader panel">
+<label for="youtubeUrl">YouTube URL</label>
+<div class="load-row">
+<input autocomplete="off" id="youtubeUrl" placeholder="https://www.youtube.com/watch?v=…" type="url"/>
+<button class="primary" id="captureYoutube">CAPTURE + CHOP</button>
+<button class="danger" disabled="" id="stopCapture">STOP CAPTURE</button>
+</div><label class="capture-threshold" for="captureStart">VIDEO START TIME
+        <input aria-describedby="captureStartHint" id="captureStart" placeholder="1:30" type="text" value="0:00"/>
+<span class="hint" id="captureStartHint">Seconds or MM:SS</span>
+</label><details class="capture-options"><summary>Capture settings &amp; help</summary><div class="capture-row">
+<span class="hint">Choose <strong>This Tab</strong> in Chrome and enable tab audio. Let the section you want play, then stop capture. Everything stays in your browser.</span>
+</div><label class="capture-threshold" for="captureThreshold">AUDIO START THRESHOLD
+        <input id="captureThreshold" max="-12" min="-72" step="3" type="number" value="-48"/> dB
         <span class="hint">Waits for sound and removes the silent lead-in. Lower for quiet sources; raise to ignore background noise.</span>
-      </label>
-      <div id="message" class="message" aria-live="polite"></div>
-    </section>
+</label></details>
 
-    <section class="workspace">
-      <div class="left panel">
-        <div id="videoPanel" class="video-panel hidden" aria-hidden="true">
-          <div class="video-head">
-            <span>VIDEO PLAYBACK</span>
-            <span id="videoStatus">NO VIDEO</span>
-          </div>
-          <div class="video-stage">
-            <div id="youtubePlayer"></div>
-            <video id="localVideo" muted playsinline preload="metadata"></video>
-            <div id="videoPlaceholder" class="video-placeholder">PASTE A YOUTUBE URL AND CAPTURE</div>
-          </div>
-        </div>
 
-        <div class="screen">
-          <div class="screen-meta">
-            <span id="trackTitle">NO TRACK LOADED</span>
-            <span id="duration">--:--</span>
-          </div>
-          <canvas id="waveform" width="960" height="260"></canvas>
-          <div class="screen-footer">
-            <span>16 SLICES • DRAG MARKERS TO RE-CHOP</span>
-            <span id="sourceInfo">1 SOURCE</span>
-            <span id="selectedInfo">PAD 01</span>
-          </div>
-        </div>
 
-        <section class="project-panel">
-          <div class="project-head">
-            <div>
-              <span class="section-label">PROJECT</span>
-              <span id="projectStatus">UNSAVED</span>
-            </div>
-            <span class="project-hint">Saved locally in this browser, including captured audio.</span>
-          </div>
-          <div class="project-row">
-            <input id="projectName" type="text" maxlength="60" value="My MPCTube Project" aria-label="Project name">
-            <button id="saveProject" class="primary">SAVE PROJECT</button>
-          </div>
-          <div class="project-row project-load-row">
-            <select id="savedProjects" aria-label="Saved projects">
-              <option value="">No saved projects</option>
-            </select>
-            <button id="loadProject" class="toggle" disabled>LOAD</button>
-            <button id="deleteProject" class="danger" disabled>DELETE</button>
-          </div>
-        </section>
+<div aria-live="polite" class="message" id="message"></div>
+</section>
+<section class="workspace">
+<div class="left panel"><div class="workspace-heading"><span class="section-label">SOURCE &amp; CHOPS</span><span>Choose a source, then shape your pads</span></div>
 
-        <section class="sources-panel">
-          <div class="sources-head">
-            <span class="section-label">SOURCES</span>
-            <span id="sourcesSummary">NO SOURCES YET</span>
-          </div>
-          <div id="sourcesList" class="sources-list">
-            <div class="sources-empty">Captured YouTube sources will appear here.</div>
-          </div>
-        </section>
+<div class="screen">
+<div class="screen-meta">
+<span id="trackTitle">NO TRACK LOADED</span>
+<span id="duration">--:--</span>
+</div>
+<canvas height="260" id="waveform" width="960"></canvas>
+<div class="screen-footer">
+<span>16 SLICES • DRAG MARKERS TO RE-CHOP</span>
+<span id="sourceInfo">1 SOURCE</span>
+<span id="selectedInfo">PAD 01</span>
+</div>
+</div><section class="sources-panel">
+<div class="sources-head">
+<span class="section-label">SOURCES</span>
+<span id="sourcesSummary">NO SOURCES YET</span>
+</div>
+<div class="sources-list" id="sourcesList">
+<div class="sources-empty">Captured YouTube sources will appear here.</div>
+</div>
+</section>
+<details class="setup-details"><summary>Save &amp; load projects</summary><section class="project-panel">
+<div class="project-head">
+<div>
+<span class="section-label">PROJECT</span>
+<span id="projectStatus">UNSAVED</span>
+</div>
+<span class="project-hint">Saved locally in this browser, including captured audio.</span>
+</div>
+<div class="project-row">
+<input aria-label="Project name" id="projectName" maxlength="60" type="text" value="My MPCTube Project"/>
+<button class="primary" id="saveProject">SAVE PROJECT</button>
+</div>
+<div class="project-row project-load-row">
+<select aria-label="Saved projects" id="savedProjects">
+<option value="">No saved projects</option>
+</select>
+<button class="toggle" disabled="" id="loadProject">LOAD</button>
+<button class="danger" disabled="" id="deleteProject">DELETE</button>
+</div>
+</section></details>
 
-        <section class="midi-panel">
-          <div class="midi-head">
-            <div>
-              <span class="section-label">MIDI</span>
-              <span id="midiStatus">NOT CONNECTED</span>
-            </div>
-            <div class="midi-actions">
-              <button id="midiConnect" class="toggle">ENABLE MIDI</button>
-              <button id="midiLearn" class="toggle" disabled>MIDI LEARN</button>
-              <button id="midiReset" class="toggle" disabled>RESET MAP</button>
-            </div>
-          </div>
-          <div class="midi-body">
-            <label>INPUT
-              <select id="midiDevice" disabled>
-                <option value="">No MIDI input</option>
-              </select>
-            </label>
-            <div id="midiMapStatus" class="midi-map-status">Default map: MIDI notes 36–51 → Pads 01–16.</div>
-          </div>
-        </section>
+<details class="setup-details"><summary>MIDI controller</summary><section class="midi-panel">
+<div class="midi-head">
+<div>
+<span class="section-label">MIDI</span>
+<span id="midiStatus">NOT CONNECTED</span>
+</div>
+<div class="midi-actions">
+<button class="toggle" id="midiConnect">ENABLE MIDI</button>
+<button class="toggle" disabled="" id="midiLearn">MIDI LEARN</button>
+<button class="toggle" disabled="" id="midiReset">RESET MAP</button>
+</div>
+</div>
+<div class="midi-body">
+<label>INPUT
+              <select disabled="" id="midiDevice">
+<option value="">No MIDI input</option>
+</select>
+</label>
+<div class="midi-map-status" id="midiMapStatus">Default map: MIDI notes 36–51 → Pads 01–16.</div>
+</div>
+</section></details>
+<div class="controls">
 
-        <div class="controls">
-          <label>MASTER<input id="masterVolume" type="range" min="0" max="1.2" value="0.9" step="0.01"></label>
-          <label>SOURCE BPM<input id="sourceBpm" type="number" min="40" max="240" value="120" step="1"></label>
-          <label>TARGET BPM<input id="targetBpm" type="number" min="40" max="240" value="120" step="1"></label>
-          <label>PITCH <span id="pitchValue" class="control-value">0 st</span><input id="pitch" type="range" min="-12" max="12" value="0" step="1"></label>
-          <button id="autoChop" class="toggle">AUTO CHOP: TRANSIENTS</button>
-          <button id="equalChop" class="toggle">EQUAL 16</button>
-          <button id="videoMode" class="toggle">VIDEO MODE: OFF</button>
-          <button id="modeBtn" class="toggle" data-mode="oneshot">MODE: ONE SHOT</button>
-          <button id="chokeBtn" class="toggle active" aria-pressed="true">POLY: ON</button>
-          <button id="stopAll" class="danger">STOP ALL</button>
-        </div>
+<label>SOURCE BPM<input id="sourceBpm" max="240" min="40" step="1" type="number" value="120"/></label>
 
-        <div class="edit">
-          <div><strong id="editPad">PAD 01</strong><span id="editTime">0.00s — 0.00s</span></div>
-          <div class="edit-buttons">
-            <button data-nudge="start:-0.05">START -</button>
-            <button data-nudge="start:0.05">START +</button>
-            <button data-nudge="end:-0.05">END -</button>
-            <button data-nudge="end:0.05">END +</button>
-            <button id="resetSlice">RESET SLICE</button>
-          </div>
-        </div>
+<label>PITCH <span class="control-value" id="pitchValue">0 st</span><input id="pitch" max="12" min="-12" step="1" type="range" value="0"/></label>
+<button class="toggle" id="autoChop">TRANSIENT CHOP</button>
+<button class="toggle" id="equalChop">EQUAL 16 CHOPS</button>
+<button class="toggle" id="videoMode">VIDEO MODE: OFF</button>
 
-        <section class="recorder">
-          <div class="recorder-head">
-            <div>
-              <div class="section-label">PERFORMANCE RECORDER</div>
-              <strong id="recordStatus">READY TO RECORD</strong>
-            </div>
-            <div id="recordClock" class="clock">00:00.0</div>
-          </div>
-          <div class="groove-controls">
-            <label>LOOP
+
+
+</div>
+<div class="edit">
+<div><strong id="editPad">PAD 01</strong><span id="editTime">0.00s — 0.00s</span></div>
+<div class="edit-buttons">
+<button data-nudge="start:-0.05">START -</button>
+<button data-nudge="start:0.05">START +</button>
+<button data-nudge="end:-0.05">END -</button>
+<button data-nudge="end:0.05">END +</button>
+<button id="resetSlice">RESET SLICE</button>
+</div>
+</div><div aria-hidden="true" class="video-panel hidden" id="videoPanel">
+<div class="video-head">
+<span>VIDEO PLAYBACK</span>
+<span id="videoStatus">NO VIDEO</span>
+</div>
+<div class="video-stage">
+<div id="youtubePlayer"></div>
+<video id="localVideo" muted="" playsinline="" preload="metadata"></video>
+<div class="video-placeholder" id="videoPlaceholder">PASTE A YOUTUBE URL AND CAPTURE</div>
+</div>
+</div>
+
+<section class="mix-panel"><div class="sources-head"><span class="section-label">LAYER MIXER</span><span>Balance your recorded takes</span></div><div class="layers" id="layers">
+<div class="empty-layer">No recorded layers yet.</div>
+</div></section></div>
+<div class="pad-workspace"><section class="recorder">
+<div class="recorder-head">
+<div>
+<div class="section-label">PERFORM &amp; RECORD</div>
+<strong id="recordStatus">READY TO RECORD</strong>
+</div>
+<div class="clock" id="recordClock">00:00.0</div>
+</div>
+
+<div class="transport">
+<button class="record" id="recordLayer" title="Shift+R">● RECORD LAYER <span class="shortcut">SHIFT+R</span></button>
+<button id="stopRecord">■ STOP</button>
+<button id="playLayers">▶ LOOP MIX</button>
+<button id="stopLayers">■ STOP LOOP</button>
+<button class="export" id="exportWav">⇩ EXPORT WAV</button>
+</div><div class="groove-controls"><label class="performance-tempo">TARGET BPM<input id="targetBpm" max="240" min="40" step="1" type="number" value="120"/></label>
+<label>LOOP
               <select id="loopBars">
-                <option value="1">1 BAR</option>
-                <option value="2">2 BARS</option>
-                <option value="4" selected>4 BARS</option>
-                <option value="8">8 BARS</option>
-              </select>
-            </label>
-            <label>QUANTISE
+<option value="1">1 BAR</option>
+<option value="2">2 BARS</option>
+<option selected="" value="4">4 BARS</option>
+<option value="8">8 BARS</option>
+</select>
+</label>
+<label>QUANTISE
               <select id="quantise">
-                <option value="off">OFF</option>
-                <option value="4">1/4</option>
-                <option value="8">1/8</option>
-                <option value="16" selected>1/16</option>
-                <option value="32">1/32</option>
-              </select>
-            </label>
-            <button id="metronome" class="toggle">METRONOME: OFF</button>
-            <button id="countIn" class="toggle active" title="Spoken 3, 2, 1, GO. Recording begins on GO; voice is excluded from WAV export.">VOICE COUNT-IN: ON</button>
-          </div>
-          <div class="transport">
-            <button id="recordLayer" class="record" title="Shift+R">● RECORD LAYER <span class="shortcut">SHIFT+R</span></button>
-            <button id="stopRecord">■ STOP</button>
-            <button id="playLayers">▶ LOOP MIX</button>
-            <button id="stopLayers">■ STOP LOOP</button>
-            <button id="exportWav" class="export">⇩ EXPORT LOOP WAV</button>
-          </div>
-          <div id="layers" class="layers">
-            <div class="empty-layer">No recorded layers yet.</div>
-          </div>
-        </section>
-      </div>
+<option value="off">OFF</option>
+<option value="4">1/4</option>
+<option value="8">1/8</option>
+<option selected="" value="16">1/16</option>
+<option value="32">1/32</option>
+</select>
+</label>
+<button class="toggle" id="metronome">METRONOME: OFF</button>
+<button class="toggle active" id="countIn" title="Spoken 3, 2, 1, GO. Recording begins on GO; voice is excluded from WAV export.">VOICE COUNT-IN: ON</button>
+</div>
 
-      <div class="pad-workspace">
-          <div id="barProgress" class="bar-progress" aria-label="Loop position">
-            <div class="bar-progress-heading"><strong id="barPosition">BAR 1 OF 4 · BEAT 1</strong><span id="barProgressState">STOPPED</span></div>
-            <div class="beat-track"><div id="barFill" class="bar-fill"></div><div class="beat-cells"><span>1</span><span>2</span><span>3</span><span>4</span></div><div id="barPlayhead" class="bar-playhead"></div></div>
-            <div id="loopBarMarkers" class="loop-bar-markers"></div>
-          </div>
-        <div class="pads panel" id="pads" aria-label="16 sample pads"></div>
-      </div>
-    </section>
+<div aria-label="Loop position" class="bar-progress" id="barProgress">
+<div class="bar-progress-heading"><strong id="barPosition">BAR 1 OF 4 · BEAT 1</strong><span id="barProgressState">STOPPED</span></div>
+<div class="beat-track"><div class="bar-fill" id="barFill"></div><div class="beat-cells"><span>1</span><span>2</span><span>3</span><span>4</span></div><div class="bar-playhead" id="barPlayhead"></div></div>
+<div class="loop-bar-markers" id="loopBarMarkers"></div>
+</div></section>
 
-    <footer>Keyboard pads: <strong>1 2 3 4 / Q W E R / A S D F / Z X C V</strong> &nbsp;•&nbsp; Record/Stop: <strong>SHIFT + R</strong> &nbsp;•&nbsp; MIDI: <strong>NOTES 36–51</strong> &nbsp;•&nbsp; Save: <strong>CTRL/CMD + S</strong></footer>
-  </main>
-  <script src="config.js?v=20260929-1915"></script>
-  <script src="app.js?v=20260930-capture-level"></script>
+<div aria-label="16 sample pads" class="pads panel" id="pads"></div>
+<div class="performance-tools"><label>MASTER<input id="masterVolume" max="1.2" min="0" step="0.01" type="range" value="0.9"/></label><button class="toggle" data-mode="oneshot" id="modeBtn">MODE: ONE SHOT</button><button aria-pressed="true" class="toggle active" id="chokeBtn">POLY: ON</button><button class="danger" id="stopAll">STOP ALL</button></div></div>
+</section>
+<footer>Keyboard pads: <strong>1 2 3 4 / Q W E R / A S D F / Z X C V</strong>  •  Record/Stop: <strong>SHIFT + R</strong>  •  MIDI: <strong>NOTES 36–51</strong>  •  Save: <strong>CTRL/CMD + S</strong></footer>
+</main>
+<script src="config.js?v=20260929-1915"></script>
+<script src="app.js?v=20260930-capture-level"></script>
 </body>
 </html>
