@@ -51,20 +51,16 @@
 </div><label class="capture-threshold" for="captureStart">VIDEO START TIME
         <input aria-describedby="captureStartHint" id="captureStart" placeholder="1:30" type="text" value="0:00"/>
 <span class="hint" id="captureStartHint">Seconds or MM:SS</span>
-</label><details class="capture-options"><summary>Capture settings &amp; help</summary><div class="capture-row">
-<span class="hint">Choose <strong>This Tab</strong> in Chrome and enable tab audio. Let the section you want play, then stop capture. Everything stays in your browser.</span>
-</div><label class="capture-threshold" for="captureThreshold">AUDIO START THRESHOLD
+</label><label class="capture-threshold" for="captureThreshold">AUDIO START THRESHOLD
         <input id="captureThreshold" max="-12" min="-72" step="3" type="number" value="-48"/> dB
         <span class="hint">Waits for sound and removes the silent lead-in. Lower for quiet sources; raise to ignore background noise.</span>
-</label></details>
-
-
-
+</label><details class="capture-options"><summary>Capture settings &amp; help</summary><div class="capture-row">
+<span class="hint">Choose <strong>This Tab</strong> in Chrome and enable tab audio. Let the section you want play, then stop capture. Everything stays in your browser.</span>
+</div></details>
 <div aria-live="polite" class="message" id="message"></div>
 </section>
 <section class="workspace">
 <div class="left panel"><div class="workspace-heading"><span class="section-label">SOURCE &amp; CHOPS</span><span>Choose a source, then shape your pads</span></div>
-
 <div class="screen">
 <div class="screen-meta">
 <span id="trackTitle">NO TRACK LOADED</span>
@@ -105,7 +101,6 @@
 <button class="danger" disabled="" id="deleteProject">DELETE</button>
 </div>
 </section></details>
-
 <details class="setup-details"><summary>MIDI controller</summary><section class="midi-panel">
 <div class="midi-head">
 <div>
@@ -128,16 +123,11 @@
 </div>
 </section></details>
 <div class="controls">
-
 <label>SOURCE BPM<input id="sourceBpm" max="240" min="40" step="1" type="number" value="120"/></label>
-
 <label>PITCH <span class="control-value" id="pitchValue">0 st</span><input id="pitch" max="12" min="-12" step="1" type="range" value="0"/></label>
 <button class="toggle" id="autoChop">TRANSIENT CHOP</button>
 <button class="toggle" id="equalChop">EQUAL 16 CHOPS</button>
 <button class="toggle" id="videoMode">VIDEO MODE: OFF</button>
-
-
-
 </div>
 <div class="edit">
 <div><strong id="editPad">PAD 01</strong><span id="editTime">0.00s — 0.00s</span></div>
@@ -159,7 +149,6 @@
 <div class="video-placeholder" id="videoPlaceholder">PASTE A YOUTUBE URL AND CAPTURE</div>
 </div>
 </div>
-
 <section class="mix-panel"><div class="sources-head"><span class="section-label">LAYER MIXER</span><span>Balance your recorded takes</span></div><div class="layers" id="layers">
 <div class="empty-layer">No recorded layers yet.</div>
 </div></section></div>
@@ -171,7 +160,6 @@
 </div>
 <div class="clock" id="recordClock">00:00.0</div>
 </div>
-
 <div class="transport">
 <button class="record" id="recordLayer" title="Shift+R">● RECORD LAYER <span class="shortcut">SHIFT+R</span></button>
 <button id="stopRecord">■ STOP</button>
@@ -179,14 +167,14 @@
 <button id="stopLayers">■ STOP LOOP</button>
 <button class="export" id="exportWav">⇩ EXPORT WAV</button>
 </div><div class="groove-controls"><label class="performance-tempo">TARGET BPM<input id="targetBpm" max="240" min="40" step="1" type="number" value="120"/></label>
-<label>LOOP
-              <select id="loopBars">
+<label>TOTAL LOOP
+<select id="loopBars">
 <option value="1">1 BAR</option>
 <option value="2">2 BARS</option>
 <option selected="" value="4">4 BARS</option>
 <option value="8">8 BARS</option>
 </select>
-</label>
+</label><label>LAYER LENGTH<select aria-label="Recording length for new layer" id="layerBars"><option value="1">1 BAR</option><option value="2">2 BARS</option><option selected="" value="4">4 BARS</option><option value="8">8 BARS</option></select></label>
 <label>QUANTISE
               <select id="quantise">
 <option value="off">OFF</option>
@@ -199,19 +187,17 @@
 <button class="toggle" id="metronome">METRONOME: OFF</button>
 <button class="toggle active" id="countIn" title="Spoken 3, 2, 1, GO. Recording begins on GO; voice is excluded from WAV export.">VOICE COUNT-IN: ON</button>
 </div>
-
 <div aria-label="Loop position" class="bar-progress" id="barProgress">
 <div class="bar-progress-heading"><strong id="barPosition">BAR 1 OF 4 · BEAT 1</strong><span id="barProgressState">STOPPED</span></div>
 <div class="beat-track"><div class="bar-fill" id="barFill"></div><div class="beat-cells"><span>1</span><span>2</span><span>3</span><span>4</span></div><div class="bar-playhead" id="barPlayhead"></div></div>
 <div class="loop-bar-markers" id="loopBarMarkers"></div>
 </div></section>
-
 <div aria-label="16 sample pads" class="pads panel" id="pads"></div>
 <div class="performance-tools"><label>MASTER<input id="masterVolume" max="1.2" min="0" step="0.01" type="range" value="0.9"/></label><button class="toggle" data-mode="oneshot" id="modeBtn">MODE: ONE SHOT</button><button aria-pressed="true" class="toggle active" id="chokeBtn">POLY: ON</button><button class="danger" id="stopAll">STOP ALL</button></div></div>
 </section>
 <footer>Keyboard pads: <strong>1 2 3 4 / Q W E R / A S D F / Z X C V</strong>  •  Record/Stop: <strong>SHIFT + R</strong>  •  MIDI: <strong>NOTES 36–51</strong>  •  Save: <strong>CTRL/CMD + S</strong></footer>
 </main>
 <script src="config.js?v=20260929-1915"></script>
-<script src="app.js?v=20260930-capture-level"></script>
+<script src="app.js?v=20261001-layer-repeat"></script>
 </body>
 </html>
