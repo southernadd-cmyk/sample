@@ -29,7 +29,7 @@
 <meta content="https://southernadd-cmyk.github.io/sample/mpctube-social.png" name="twitter:image"/>
 <meta content="MPCTube — Capture. Chop. Layer. Loop." name="twitter:image:alt"/>
 <link href="style.css?v=20261001-studio" rel="stylesheet"/>
-</head>
+<style>.youtube-search{padding:12px 16px;margin-bottom:14px}.youtube-search summary{cursor:pointer;color:var(--lime);font-size:11px;padding:4px 0}.youtube-search[open] summary{margin-bottom:12px}.youtube-search a{color:var(--amber);font-size:11px}.youtube-search-results{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;max-height:380px;overflow:auto}.youtube-search-result{padding:12px;background:#121612;border:1px solid var(--line);border-radius:8px}.youtube-search-result strong{display:block;font-size:12px;margin-bottom:6px}.youtube-search-result small{color:var(--muted);display:block;margin-bottom:10px}.youtube-search-actions{display:flex;gap:8px;flex-wrap:wrap}.youtube-search-actions button{font:inherit;font-size:10px;cursor:pointer;padding:8px;border-radius:6px;border:1px solid var(--line);background:#252a25;color:var(--ink)}@media(max-width:700px){.youtube-search-results{grid-template-columns:1fr}}</style></head>
 <body>
 <main class="shell">
 <header class="topbar">
@@ -59,6 +59,10 @@
 </div></details>
 <div aria-live="polite" class="message" id="message"></div>
 </section>
+<details class="youtube-search panel"><summary>FIND SAMPLES · SEARCH YOUTUBE</summary>
+<form id="youtubeSearchForm" class="load-row"><input id="youtubeSearchQuery" type="search" maxlength="200" placeholder="Search artists, drum breaks, vocals…" aria-label="Search YouTube" required><button id="youtubeSearchButton" class="primary" type="submit">SEARCH</button></form>
+<a id="youtubeSearchExternal" href="https://www.youtube.com/" target="_blank" rel="noopener noreferrer">Open YouTube Search ↗</a>
+<p id="youtubeSearchStatus" class="hint" role="status"></p><div id="youtubeSearchResults" class="youtube-search-results"></div></details>
 <section class="workspace">
 <div class="left panel"><div class="workspace-heading"><span class="section-label">SOURCE &amp; CHOPS</span><span>Choose a source, then shape your pads</span></div>
 <div class="screen">
@@ -198,6 +202,6 @@
 <footer>Keyboard pads: <strong>1 2 3 4 / Q W E R / A S D F / Z X C V</strong>  •  Record/Stop: <strong>SHIFT + R</strong>  •  MIDI: <strong>NOTES 36–51</strong>  •  Save: <strong>CTRL/CMD + S</strong></footer>
 </main>
 <script src="config.js?v=20260929-1915"></script>
-<script src="app.js?v=20261001-layer-repeat"></script>
+<script src="app.js?v=20261001-search"></script>
 </body>
 </html>
