@@ -1151,3 +1151,31 @@ updateBarProgress();
 els.loopBars.addEventListener('change',()=>updateBarProgress());
 
 document.querySelector('#layerBars').addEventListener('change',()=>{if(recording)stopRecording();markProjectDirty()});
+
+const searchForm=document.querySelector('#youtubeSearchForm'),searchQuery=document.querySelector('#youtubeSearchQuery'),searchExternal=document.querySelector('#youtubeSearchExternal'),searchStatus=document.querySelector('#youtubeSearchStatus'),searchResults=document.querySelector('#youtubeSearchResults');
+searchQuery.addEventListener('input',()=>{searchExternal.href='https://www.youtube.com/results?search_query='+encodeURIComponent(searchQuery.value)});
+searchForm.addEventListener('submit',async event=>{
+  event.preventDefault();const query=searchQuery.value.trim();if(!query)return;
+  const button=document.querySelector('#youtubeSearchButton');button.disabled=true;searchStatus.textContent='Searching YouTube…';searchResults.replaceChildren();
+  try{
+    const response=await fetch(API_BASE+'/api/youtube/search?q='+encodeURIComponent(query),{signal:AbortSignal.timeout(25000)});
+    if(!response.ok)throw new Error('Search unavailable');
+    const data=await response.json();
+    for(const result of data.results||[]){
+      if(!/^[A-Za-z0-9_-]{11}$/.test(result.id))continue;
+      const url='https://www.youtube.com/watch?v='+result.id,row=document.createElement('article');row.className='youtube-search-result';
+      const title=document.createElement('strong');title.textContent=result.title;
+      const meta=document.createElement('small');meta.textContent=(result.channel||'YouTube')+(result.duration?' · '+formatTime(result.duration):'');
+      const actions=document.createElement('div');actions.className='youtube-search-actions';
+      const copy=document.createElement('button');copy.type='button';copy.textContent='COPY URL';copy.onclick=async()=>{
+        try{await navigator.clipboard.writeText(url);copy.textContent='COPIED';setTimeout(()=>copy.textContent='COPY URL',1800)}
+        catch{els.url.value=url;els.url.focus();els.url.select();searchStatus.textContent='Clipboard unavailable. URL selected in the source field—press Ctrl/Cmd+C.'}
+      };
+      const use=document.createElement('button');use.type='button';use.textContent='USE SOURCE';use.onclick=()=>{els.url.value=url;document.querySelector('#captureStart').value='0:00';els.url.scrollIntoView({behavior:'smooth',block:'center'});setMessage('Source selected. Click CAPTURE + CHOP when ready.')};
+      const open=document.createElement('a');open.href=url;open.target='_blank';open.rel='noopener noreferrer';open.textContent='Open Video ↗';
+      actions.append(copy,use,open);row.append(title,meta,actions);searchResults.append(row)
+    }
+    searchStatus.textContent=searchResults.children.length?searchResults.children.length+' results. Copy a URL or choose Use Source.':'No results found. Try another phrase.'
+  }catch{searchStatus.textContent='In-panel search is unavailable on the current backend. Use Open YouTube Search, then paste a video URL above.'}
+  finally{button.disabled=false}
+});
