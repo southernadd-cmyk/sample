@@ -1098,7 +1098,25 @@ function renderLayers(){
   })
 }
 
-async function exportWav(){if(!buffer||!layers.some(l=>!l.muted&&l.events.length))return setMessage('Nothing recorded to export.',true);const duration=loopDuration(),sr=buffer.sampleRate,offline=new OfflineAudioContext(2,Math.ceil(duration*sr),sr),gain=offline.createGain();gain.gain.value=Number(els.master.value);gain.connect(offline.destination);for(const layer of layers){if(layer.muted)continue;for(const offset of layerRepeats(layer))for(const e of layer.events){if(offset+eventTime(e)<duration)makeSourceOffline(offline,gain,e,layer,offset)}}setMessage('Rendering '+loopBars()+'-bar loop WAV…');try{const rendered=await offline.startRendering(),wav=audioBufferToWav(rendered),blob=new Blob([wav],{type:'audio/wav'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='sample-loop-'+loopBars()+'bar-'+Math.round(clampBpm(els.targetBpm.value))+'bpm-'+new Date().toISOString().replace(/[:.]/g,'-')+'.wav';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);setMessage('Loop WAV exported.')}catch(err){console.error(err);setMessage('Could not render WAV.',true)}}
+function smoothLoopSeam(b,fadeMs=8){
+  const n=Math.min(Math.round(b.sampleRate*fadeMs/1000),Math.floor((b.length-1)/2));
+  if(n<2)return b;
+  for(let c=0;c<b.numberOfChannels;c++){
+    const data=b.getChannelData(c),tailStart=b.length-n;
+    const seam=(data[0]+data[b.length-1])*.5;
+    for(let i=0;i<n;i++){
+      const tailMix=(i+1)/n,tailCurve=.5-.5*Math.cos(Math.PI*tailMix);
+      data[tailStart+i]=data[tailStart+i]*(1-tailCurve)+seam*tailCurve;
+      const headMix=i/(n-1),headCurve=.5-.5*Math.cos(Math.PI*headMix);
+      data[i]=seam*(1-headCurve)+data[i]*headCurve
+    }
+    // Make the actual wrap sample-continuous while preserving the exact loop length.
+    data[0]=seam;
+    data[b.length-1]=seam
+  }
+  return b
+}
+async function exportWav(){if(!buffer||!layers.some(l=>!l.muted&&l.events.length))return setMessage('Nothing recorded to export.',true);const duration=loopDuration(),sr=buffer.sampleRate,offline=new OfflineAudioContext(2,Math.ceil(duration*sr),sr),gain=offline.createGain();gain.gain.value=Number(els.master.value);gain.connect(offline.destination);for(const layer of layers){if(layer.muted)continue;for(const offset of layerRepeats(layer))for(const e of layer.events){if(offset+eventTime(e)<duration)makeSourceOffline(offline,gain,e,layer,offset)}}setMessage('Rendering '+loopBars()+'-bar loop WAV…');try{const rendered=await offline.startRendering();smoothLoopSeam(rendered);const wav=audioBufferToWav(rendered),blob=new Blob([wav],{type:'audio/wav'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='sample-loop-'+loopBars()+'bar-'+Math.round(clampBpm(els.targetBpm.value))+'bpm-'+new Date().toISOString().replace(/[:.]/g,'-')+'.wav';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);setMessage('Loop WAV exported with an 8 ms seamless-wrap crossfade.')}catch(err){console.error(err);setMessage('Could not render WAV.',true)}}
 function makeSourceOffline(offline,dest,e,layer,offset=0){const src=sourceForEvent(e);if(!src?.buffer)return;const s=offline.createBufferSource(),gain=offline.createGain();s.buffer=src.buffer;s.playbackRate.value=e.rate||1;gain.gain.value=(e.velocity??1)*layerVolume(layer);s.connect(gain);gain.connect(dest);s.start(offset+eventTime(e),e.start??0,recordedEventDuration(layer,e))}
 function audioBufferToWav(b){const channels=b.numberOfChannels,samples=b.length,bytes=44+samples*channels*2,ab=new ArrayBuffer(bytes),v=new DataView(ab);let o=0;const str=s=>{for(let i=0;i<s.length;i++)v.setUint8(o++,s.charCodeAt(i))},u32=n=>{v.setUint32(o,n,true);o+=4},u16=n=>{v.setUint16(o,n,true);o+=2};str('RIFF');u32(bytes-8);str('WAVE');str('fmt ');u32(16);u16(1);u16(channels);u32(b.sampleRate);u32(b.sampleRate*channels*2);u16(channels*2);u16(16);str('data');u32(samples*channels*2);const data=Array.from({length:channels},(_,c)=>b.getChannelData(c));for(let i=0;i<samples;i++)for(let c=0;c<channels;c++){const x=Math.max(-1,Math.min(1,data[c][i]));v.setInt16(o,x<0?x*32768:x*32767,true);o+=2}return ab}
 
