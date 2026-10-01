@@ -1,5 +1,6 @@
 from flask import Flask, Response, jsonify, request, send_from_directory
 import os
+import re
 import requests
 import yt_dlp
 from flask_cors import CORS
@@ -39,6 +40,32 @@ def index():
 @app.get("/health")
 def health():
     return {"ok": True}
+
+@app.get("/api/youtube/search")
+def youtube_search():
+    query = request.args.get("q", "").strip()
+    if not query or len(query) > 200:
+        return jsonify(error="Enter a search phrase of 1–200 characters."), 400
+    try:
+        with yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True,
+                              "extract_flat": True, "skip_download": True,
+                              "socket_timeout": 10, "retries": 1}) as ydl:
+            info = ydl.extract_info("ytsearch8:" + query, download=False)
+        results = []
+        for entry in (info or {}).get("entries") or []:
+            if not entry:
+                continue
+            video_id = str(entry.get("id") or "")
+            if not re.fullmatch(r"[A-Za-z0-9_-]{11}", video_id):
+                continue
+            results.append({"id": video_id, "title": entry.get("title") or "YouTube video",
+                            "channel": entry.get("channel") or entry.get("uploader") or "",
+                            "duration": entry.get("duration"),
+                            "url": "https://www.youtube.com/watch?v=" + video_id})
+        return jsonify(results=results)
+    except Exception:
+        app.logger.exception("YouTube search failed")
+        return jsonify(error="Search is temporarily unavailable. Use Open YouTube Search."), 502
 
 @app.post("/api/youtube")
 def youtube_audio():
