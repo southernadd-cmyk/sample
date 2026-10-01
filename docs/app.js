@@ -1158,10 +1158,12 @@ searchForm.addEventListener('submit',async event=>{
   event.preventDefault();const query=searchQuery.value.trim();if(!query)return;
   const button=document.querySelector('#youtubeSearchButton');button.disabled=true;searchStatus.textContent='Searching YouTube…';searchResults.replaceChildren();
   try{
-    const response=await fetch(API_BASE+'/api/youtube/search?q='+encodeURIComponent(query),{signal:AbortSignal.timeout(25000)});
+    const response=await fetch('https://invidious.f5.si/api/v1/search?type=video&q='+encodeURIComponent(query),{signal:AbortSignal.timeout(15000),credentials:'omit',referrerPolicy:'no-referrer'});
     if(!response.ok)throw new Error('Search unavailable');
-    const data=await response.json();
-    for(const result of data.results||[]){
+    const videos=await response.json();
+    if(!Array.isArray(videos))throw new Error('Invalid search response');
+    const results=videos.filter(video=>video.type==='video').slice(0,12).map(video=>({id:video.videoId,title:video.title,channel:video.author,duration:video.lengthSeconds}));
+    for(const result of results){
       if(!/^[A-Za-z0-9_-]{11}$/.test(result.id))continue;
       const url='https://www.youtube.com/watch?v='+result.id,row=document.createElement('article');row.className='youtube-search-result';
       const title=document.createElement('strong');title.textContent=result.title;
@@ -1176,6 +1178,6 @@ searchForm.addEventListener('submit',async event=>{
       actions.append(copy,use,open);row.append(title,meta,actions);searchResults.append(row)
     }
     searchStatus.textContent=searchResults.children.length?searchResults.children.length+' results. Copy a URL or choose Use Source.':'No results found. Try another phrase.'
-  }catch{searchStatus.textContent='In-panel search is unavailable on the current backend. Use Open YouTube Search, then paste a video URL above.'}
+  }catch{searchStatus.textContent='The public search service is unavailable. Use Open YouTube Search, then paste a video URL above.'}
   finally{button.disabled=false}
 });
