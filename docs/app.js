@@ -1119,12 +1119,12 @@ function smoothLoopSeam(b,fadeMs=8){
 
 // MPC Sample exports are independent of the performance mix: they use the current
 // source's exact sixteen pad regions (and bake its current tempo/pitch into WAVs).
-let mpcDeviceTemplate=null,mpcExportAfterPicker=false;
+let mpcDeviceTemplate=null;
 const mpcKitButton=document.querySelector('#exportMpcKit');
 const mpcTemplateFile=document.querySelector('#mpcTemplateFile');
 const mpcTemplateStatus=document.querySelector('#mpcTemplateStatus');
 function updateMpcExportUi(){
-  if(mpcTemplateStatus)mpcTemplateStatus.textContent=mpcDeviceTemplate?'DEVICE TEMPLATE READY — KEPT IN THIS BROWSER':'FIRST EXPORT: CHOOSE AN EMPTY .XPJ SAVED ON YOUR MPC SAMPLE';
+  if(mpcTemplateStatus)mpcTemplateStatus.textContent=mpcDeviceTemplate?'NATIVE XPJ EXPORT READY — DEVICE TEMPLATE STORED':'WAV-ONLY EXPORT READY · LOAD AN EMPTY DEVICE .XPJ FOR AUTOMATIC PAD ASSIGNMENT';
 }
 async function storeMpcTemplate(file){
   if(!file?.name?.toLowerCase().endsWith('.xpj'))throw Error('Choose a .xpj project saved from your MPC Sample.');
@@ -1158,55 +1158,100 @@ async function renderMpcChop(audio,slice,rate){
 }
 async function exportMpcSampleKit(){
   if(!buffer||!pads.length)return setMessage('Capture a sample and choose its chops first.',true);
-  if(!mpcDeviceTemplate){mpcExportAfterPicker=true;mpcTemplateFile.click();return}
   if(mpcKitButton.disabled)return;
   mpcKitButton.disabled=true;
   const kit=MpcKitExport.safeName(els.projectName?.value||activeSource()?.title||'MPCTube Kit');
+  const filename=kit+' - MPC Sample Kit.zip';
+  let saveHandle=null;
   try{
+    // A real Save As dialog, initiated before any asynchronous audio rendering.
+    // If File System Access is unavailable, use the browser's normal download.
+    if(typeof window.showSaveFilePicker==='function'){
+      try{
+        saveHandle=await window.showSaveFilePicker({
+          suggestedName:filename,
+          types:[{description:'MPC Sample kit (ZIP)',accept:{'application/zip':['.zip']}}],
+          excludeAcceptAllOption:false
+        });
+      }catch(err){
+        if(err?.name==='AbortError')return; // Cancel means don't export.
+        console.warn('Save As unavailable; falling back to browser download.',err);
+      }
+    }
+    await mpcTemplateRestore;
     saveActiveSourceState();
     const chosenSource=activeSource(),sourceBuffer=chosenSource?.buffer||buffer;
     const boundaries=(chosenSource?.pads||pads).map(p=>({...p}));
     if(boundaries.length!==16||boundaries.some(p=>!Number.isFinite(p.start)||!Number.isFinite(p.end)||p.start<0||p.end<=p.start||p.end>sourceBuffer.duration+.001))throw Error('Some pad chop boundaries are invalid.');
     const rate=getPlaybackRate(),bpm=clampBpm(els.targetBpm.value),bars=loopBars();
+    const native=!!mpcDeviceTemplate;
+    const wavFolder=native?kit+'_[ProjectData]/':kit+'/';
     const files=[],entries=[];
     for(let i=0;i<16;i++){
       const name='A'+String(i+1).padStart(2,'0')+'.wav';
       setMessage('Preparing MPC Sample kit: rendering pad '+(i+1)+' of 16…');
       const rendered=await renderMpcChop(sourceBuffer,boundaries[i],rate);
       entries.push({name,frames:rendered.length});
-      files.push({name:kit+'_[ProjectData]/'+name,data:new Uint8Array(audioBufferToWav(rendered))});
+      files.push({name:wavFolder+name,data:new Uint8Array(audioBufferToWav(rendered))});
     }
-    setMessage('Writing MPC Sample project and packaging samples…');
-    const project=MpcKitExport.buildProject(mpcDeviceTemplate,kit,entries,bpm,bars);
-    const xpj=await MpcKitExport.encodeProject(project);
-    files.unshift({name:kit+'.xpj',data:xpj});
-    const notes='MPCTube → Akai MPC Sample\\n'
-      +'Kit: '+kit+'\\nSource: '+(chosenSource?.title||'Current source')+'\\n'
-      +'Pads: A01-A16 (matching pad numbers)\\nTarget tempo: '+bpm+' BPM\\n'
-      +'Chops are trimmed and pitch/tempo playback rate is baked into 44.1 kHz 16-bit stereo WAVs.\\n'
-      +'Recorded mix layers and sequences are not exported.\\n\\n'
-      +'HOW TO LOAD\\n1. Unzip this package.\\n'
-      +'2. Copy '+kit+'.xpj AND '+kit+'_[ProjectData]/ together to your MPC Sample microSD card.\\n'
-      +'3. On the MPC Sample, use Project > Load Project and select '+kit+'.xpj.\\n'
-      +'The project uses your device-saved .xpj template for firmware compatibility.\\n';
-    files.push({name:'READ ME - MPC Sample.txt',data:new TextEncoder().encode(notes.replace(/\\n/g,'\n'))});
+    if(native){
+      setMessage('Writing native MPC Sample XPJ project…');
+      const project=MpcKitExport.buildProject(mpcDeviceTemplate,kit,entries,bpm,bars);
+      files.unshift({name:kit+'.xpj',data:await MpcKitExport.encodeProject(project)});
+    }
+    const mapping=['MPCTube Pad,WAV File',...entries.map((entry,i)=>
+      'A'+String(i+1).padStart(2,'0')+','+wavFolder+entry.name)].join('\n')+'\n';
+    files.push({name:'PAD MAP.csv',data:new TextEncoder().encode(mapping)});
+    const help=native?[
+      'NATIVE MPC SAMPLE PROJECT',
+      '1. Unzip this ZIP.',
+      '2. Copy '+kit+'.xpj and '+kit+'_[ProjectData]/ together onto the MPC Sample microSD card.',
+      '3. Load '+kit+'.xpj using the MPC Sample project browser.',
+      'The project uses your own device-saved .xpj template.'
+    ]:[
+      'WAV CHOPS ONLY — NOT YET A NATIVE MPC SAMPLE PROJECT',
+      'The 16 trimmed samples are included, with a PAD MAP.csv listing their pad numbers.',
+      'Without a native .xpj project, the device cannot automatically map these sounds to pads.',
+      'To export a loadable MPC Sample project, open MPCTube > MPC Sample Kit Setup',
+      'and select an empty .xpj saved by your MPC Sample. Then export again.',
+      'Alternatively, load the WAV files onto pads manually on the hardware.'
+    ];
+    const notes=[
+      'MPCTube - Akai MPC Sample export',
+      'Kit: '+kit,'Source: '+(chosenSource?.title||'Current source'),
+      'Pad numbering: A01-A16', 'Target tempo: '+bpm+' BPM',
+      'Audio: 44.1 kHz, stereo, 16-bit PCM WAV. Adjusted chop boundaries and playback rate are baked in.',
+      'Recorded mixes, overdubs and sequences are not exported.',
+      '',...help,''
+    ].join('\n');
+    files.push({name:'READ ME - MPC Sample.txt',data:new TextEncoder().encode(notes)});
     const zip=MpcKitExport.zipFiles(files);
-    MpcKitExport.download(zip,kit+' - MPC Sample Kit.zip');
-    setMessage('MPC Sample kit exported: 16 WAV chops and native .XPJ project. Unzip and copy both project and data folder to the microSD card.');
+    if(saveHandle){
+      const writable=await saveHandle.createWritable();
+      try{await writable.write(zip);await writable.close()}
+      catch(err){try{await writable.abort()}catch{};throw err}
+    }else{
+      MpcKitExport.download(zip,filename);
+    }
+    setMessage(native
+      ?'MPC Sample kit saved: 16 WAV chops + native XPJ with pads A01-A16.'
+      :'16 WAV chops saved in a ZIP. To auto-assign them to MPC Sample pads, choose a device .xpj separately under MPC Sample Kit Setup and export again.');
   }catch(err){
     console.error('MPC Sample export failed:',err);
     setMessage('MPC Sample export failed: '+(err?.message||'unknown error'),true);
   }finally{mpcKitButton.disabled=false}
 }
-document.querySelector('#chooseMpcTemplate').addEventListener('click',()=>{mpcExportAfterPicker=false;mpcTemplateFile.click()});
+document.querySelector('#chooseMpcTemplate').addEventListener('click',()=>mpcTemplateFile.click());
 mpcTemplateFile.addEventListener('change',async()=>{
-  const file=mpcTemplateFile.files?.[0],startExport=mpcExportAfterPicker;
-  mpcExportAfterPicker=false;mpcTemplateFile.value='';
+  const file=mpcTemplateFile.files?.[0];
+  mpcTemplateFile.value='';
   if(!file)return;
-  try{await storeMpcTemplate(file);if(startExport)await exportMpcSampleKit()}
+  try{await storeMpcTemplate(file)}
   catch(err){setMessage('MPC template setup failed: '+(err?.message||'Invalid project'),true)}
 });
-mpcKitButton.addEventListener('click',async()=>{await mpcTemplateRestore;exportMpcSampleKit()});
+// Important: call directly from the click. Awaiting template restore first would
+// lose the user activation required for Chrome's Save As picker.
+mpcKitButton.addEventListener('click',exportMpcSampleKit);
 
 async function exportWav(){if(!buffer||!layers.some(l=>!l.muted&&l.events.length))return setMessage('Nothing recorded to export.',true);const duration=loopDuration(),sr=buffer.sampleRate,offline=new OfflineAudioContext(2,Math.ceil(duration*sr),sr),gain=offline.createGain();gain.gain.value=Number(els.master.value);gain.connect(offline.destination);for(const layer of layers){if(layer.muted)continue;for(const offset of layerRepeats(layer))for(const e of layer.events){if(offset+eventTime(e)<duration)makeSourceOffline(offline,gain,e,layer,offset)}}setMessage('Rendering '+loopBars()+'-bar loop WAV…');try{const rendered=await offline.startRendering();smoothLoopSeam(rendered);const wav=audioBufferToWav(rendered),blob=new Blob([wav],{type:'audio/wav'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='sample-loop-'+loopBars()+'bar-'+Math.round(clampBpm(els.targetBpm.value))+'bpm-'+new Date().toISOString().replace(/[:.]/g,'-')+'.wav';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);setMessage('Loop WAV exported with an 8 ms seamless-wrap crossfade.')}catch(err){console.error(err);setMessage('Could not render WAV.',true)}}
 function makeSourceOffline(offline,dest,e,layer,offset=0){const src=sourceForEvent(e);if(!src?.buffer)return;const s=offline.createBufferSource(),gain=offline.createGain();s.buffer=src.buffer;s.playbackRate.value=e.rate||1;gain.gain.value=(e.velocity??1)*layerVolume(layer);s.connect(gain);gain.connect(dest);s.start(offset+eventTime(e),e.start??0,recordedEventDuration(layer,e))}
