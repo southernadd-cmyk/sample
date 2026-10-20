@@ -27,8 +27,8 @@ function decodeLosslessJson(raw){
       continue;
     }
     if(ch==='"'){quoted=true;continue}
-    if((ch==='-'||(ch>='0'&&ch<='9'))&&/[:\\[,]/.test(raw[i-1]||'')){
-      const match=/^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?(?:[eE][+-]?\\d+)?/.exec(raw.slice(i));
+    if((ch==='-'||(ch>='0'&&ch<='9'))&&(raw[i-1]===':'||raw[i-1]===','||raw[i-1]==='[')){
+      const match=/^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/.exec(raw.slice(i));
       if(match){
         const token=match[0];
         if(/[.eE]/.test(token)){
@@ -43,7 +43,7 @@ function decodeLosslessJson(raw){
   return {doc:JSON.parse(out.join('')),floatLexemes};
 }
 function encodeLosslessJson(doc,floatLexemes){
-  return JSON.stringify(doc).replace(/"__MPCTUBE_FLOAT_(\\d+)__"/g,(_,num)=>{
+  return JSON.stringify(doc).replace(/"__MPCTUBE_FLOAT_(\d+)__"/g,(_,num)=>{
     const lexeme=floatLexemes[Number(num)];
     if(typeof lexeme!=='string')throw Error('Missing floating-point value in the project.');
     return lexeme;
@@ -68,12 +68,12 @@ async function parseTemplate(binary){
   if(b.length>6000000)throw Error('Template too large. Please save a new empty project on the MPC Sample.');
   const plain=decoder.decode(await transform(b,'gunzip'));
   let pos=0;const headerLines=[];
-  for(let i=0;i<5;i++){const end=plain.indexOf('\\n',pos);if(end<0)throw Error('XPJ header is incomplete.');headerLines.push(plain.slice(pos,end));pos=end+1}
+  for(let i=0;i<5;i++){const end=plain.indexOf('\n',pos);if(end<0)throw Error('XPJ header is incomplete.');headerLines.push(plain.slice(pos,end));pos=end+1}
   if(headerLines[0]!=='ACVS'||headerLines[2]!=='SerialisableProjectData'||headerLines[3]!=='json')throw Error('This XPJ is not an MPC Sample drum project.');
   return validateDrumTemplate(readProjectJson(plain.slice(pos),plain.slice(0,pos)));
 }
 function parseBundledTemplateText(raw){
-  const project=validateDrumTemplate(readProjectJson(raw,'ACVS\\n1.3.0.12\\nSerialisableProjectData\\njson\\nLinux\\n'),true);
+  const project=validateDrumTemplate(readProjectJson(raw,'ACVS\n1.3.0.12\nSerialisableProjectData\njson\nLinux\n'),true);
   if(project.doc.data.lastSavedProductIdentifier!=='AC50')throw Error('Bundled project is not an MPC Sample template.');
   const inst=project.doc.data.tracks[0].program.drum.instruments;
   inst.push(...Array.from({length:127},()=>JSON.parse(JSON.stringify(inst[0]))));
@@ -91,7 +91,7 @@ async function loadBundledTemplate(){
 function clone(value){return JSON.parse(JSON.stringify(value))}
 function makeLayer(name,frames,prototype){
   const layer=prototype?clone(prototype):{active:true,volume:{gainCoefficient:1,controlValue:1,law:1},pan:0.5};
-  layer.sampleName=name.replace(/\\.wav$/i,'');
+  layer.sampleName=name.replace(/\.wav$/i,'');
   layer.sampleFile=name;
   layer.sampleStart=0;
   layer.sampleEnd=frames;
