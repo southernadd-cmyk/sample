@@ -1,0 +1,17 @@
+MPC Sample project data template attribution
+
+File: docs/mpc-sample-template.json
+Derived from: https://github.com/WorldLinkStudio/mpcsample
+Original asset: src/xpj/template.skeleton.json
+Upstream license: GNU General Public License v3.0
+Upstream project: WorldLinkStudio/mpcsample (third-party independent project)
+
+Transformation: Kept the device's original numeric JSON tokens and full
+project/mixer/sequence metadata; collapsed the 128 identical empty drum
+pad objects to a single template pad for compact distribution. MPCTube
+expands this back to 128 slots when generating an XPJ.
+
+This notice and mpc-template-LICENSE.txt apply to the bundled template
+asset. MPCTube does not claim endorsement by the original project or Akai.
+User-created audio recordings and WAV chops are not derived from the
+template and are not covered by this notice.
