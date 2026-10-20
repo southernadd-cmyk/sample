@@ -44,29 +44,36 @@ The browser stores the performance as timed pad-trigger events. WAV export uses 
 
 ## Exporting an Akai MPC Sample kit
 
-**Export MPC Sample Kit always initiates saving a ZIP**, never opening a file
-to import. In browsers that support the File System Access API, Chrome displays
-a native **Save As** dialog. Other browsers use a normal file download.
+**Export MPC Sample Kit now includes the native `.xpj` project automatically.**
+No blank project from your hardware is required. Each ZIP contains
+`<KitName>.xpj`, the matching `<KitName>_[ProjectData]/` folder with
+`A01.wav` through `A16.wav`, `PAD MAP.csv`, and loading instructions.
+Chrome opens Save As (other browsers use a download).
 
-The ZIP always includes 16 individual 44.1 kHz, 16-bit stereo WAV chops from
-the active source with their edited boundaries and tempo/pitch playback rate
-baked in, plus a `PAD MAP.csv` file for pads A01–A16. Recorded performances
-are not exported.
+The 16 samples come from the active source with precise edited chop boundaries;
+44.1 kHz 16-bit stereo WAV output bakes in current tempo/pitch playback rate.
+Performance layers, recordings, and sequences are not exported.
 
-**Optional native MPC Sample project:** Automatic mapping on hardware requires
-a firmware-compatible `.xpj` template. On your MPC Sample, save an empty drum
-project and transfer its `.xpj` to your computer. In MPCTube, expand
-**MPC Sample Kit Setup · Optional Native Project** and click
-**Load / Change Device .XPJ Template**. The device file is imported *only*
-through that button, not via the Export action. MPCTube stores the template
-locally in your browser. Subsequent exports then include `<KitName>.xpj`
-and a matching `<KitName>_[ProjectData]/` WAV folder alongside the pad map.
+The built-in project is a compact native MPC Sample blank-project skeleton,
+expanded to 128 pads in the browser. MPC Sample floating-point numeric
+representations are preserved when the project is written, rather than
+round-tripping through normal JavaScript JSON formatting.
 
-Without a template the saved ZIP contains only a WAV folder and pad map,
-so pad assignments must be made manually on the MPC Sample; the export
-message makes this limitation explicit. Unzip native kits and transfer
-both the `.xpj` and matching `_[ProjectData]` folder to the microSD card.
-Actual on-device loading should be verified on a physical MPC Sample.
+Unzip the downloaded kit and copy **both** the `.xpj` and matching
+`_[ProjectData]` folder to the MPC Sample microSD card. Hardware and firmware
+compatibility still need verifying on the actual MPC Sample. If a particular
+firmware requires a different base project, a **device template override**
+remains available under MPC Sample Kit · Optional Device Template Override.
+
+### Bundled template provenance
+
+`docs/mpc-sample-template.json` is a compact blank-device project
+skeleton adapted from the open-source
+[WorldLinkStudio/mpcsample](https://github.com/WorldLinkStudio/mpcsample)
+template, under GPL-3.0. The asset is stored separately from MPCTube's
+own JavaScript implementation. See `docs/mpc-template-NOTICE.txt` and
+`docs/mpc-template-LICENSE.txt` for attribution/licensing. The samples
+produced by users remain their own content.
 
 ## Run locally
 
