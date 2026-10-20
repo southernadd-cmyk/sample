@@ -1116,6 +1116,98 @@ function smoothLoopSeam(b,fadeMs=8){
   }
   return b
 }
+
+// MPC Sample exports are independent of the performance mix: they use the current
+// source's exact sixteen pad regions (and bake its current tempo/pitch into WAVs).
+let mpcDeviceTemplate=null,mpcExportAfterPicker=false;
+const mpcKitButton=document.querySelector('#exportMpcKit');
+const mpcTemplateFile=document.querySelector('#mpcTemplateFile');
+const mpcTemplateStatus=document.querySelector('#mpcTemplateStatus');
+function updateMpcExportUi(){
+  if(mpcTemplateStatus)mpcTemplateStatus.textContent=mpcDeviceTemplate?'DEVICE TEMPLATE READY — KEPT IN THIS BROWSER':'FIRST EXPORT: CHOOSE AN EMPTY .XPJ SAVED ON YOUR MPC SAMPLE';
+}
+async function storeMpcTemplate(file){
+  if(!file?.name?.toLowerCase().endsWith('.xpj'))throw Error('Choose a .xpj project saved from your MPC Sample.');
+  const original=new Uint8Array(await file.arrayBuffer());
+  const parsed=await MpcKitExport.parseTemplate(original);
+  mpcDeviceTemplate=parsed;
+  try{localStorage.setItem(MpcKitExport.storageKey,MpcKitExport.encodedBase64(original))}
+  catch(err){console.warn('MPC template cannot be persisted locally:',err)}
+  updateMpcExportUi();
+  setMessage('MPC Sample template loaded. Future kits can be exported with one click.');
+}
+const mpcTemplateRestore=(async()=>{
+  try{
+    const encoded=localStorage.getItem(MpcKitExport.storageKey);
+    if(encoded)mpcDeviceTemplate=await MpcKitExport.parseTemplate(MpcKitExport.decodedBase64(encoded));
+  }catch(err){
+    console.warn('Stored MPC Sample template was invalid:',err);
+    try{localStorage.removeItem(MpcKitExport.storageKey)}catch{}
+  }
+  updateMpcExportUi();
+})();
+async function renderMpcChop(audio,slice,rate){
+  const seconds=Math.max(0.001,(slice.end-slice.start)/rate),sampleRate=44100;
+  const frames=Math.max(1,Math.ceil(seconds*sampleRate));
+  if(!Number.isFinite(seconds)||seconds>600)throw Error('The selected chop is invalid or too long.');
+  const offline=new OfflineAudioContext(2,frames,sampleRate);
+  const node=offline.createBufferSource();node.buffer=audio;node.playbackRate.value=rate;
+  node.connect(offline.destination);
+  node.start(0,slice.start,slice.end-slice.start);
+  return offline.startRendering();
+}
+async function exportMpcSampleKit(){
+  if(!buffer||!pads.length)return setMessage('Capture a sample and choose its chops first.',true);
+  if(!mpcDeviceTemplate){mpcExportAfterPicker=true;mpcTemplateFile.click();return}
+  if(mpcKitButton.disabled)return;
+  mpcKitButton.disabled=true;
+  const kit=MpcKitExport.safeName(els.projectName?.value||activeSource()?.title||'MPCTube Kit');
+  try{
+    saveActiveSourceState();
+    const chosenSource=activeSource(),sourceBuffer=chosenSource?.buffer||buffer;
+    const boundaries=(chosenSource?.pads||pads).map(p=>({...p}));
+    if(boundaries.length!==16||boundaries.some(p=>!Number.isFinite(p.start)||!Number.isFinite(p.end)||p.start<0||p.end<=p.start||p.end>sourceBuffer.duration+.001))throw Error('Some pad chop boundaries are invalid.');
+    const rate=getPlaybackRate(),bpm=clampBpm(els.targetBpm.value),bars=loopBars();
+    const files=[],entries=[];
+    for(let i=0;i<16;i++){
+      const name='A'+String(i+1).padStart(2,'0')+'.wav';
+      setMessage('Preparing MPC Sample kit: rendering pad '+(i+1)+' of 16…');
+      const rendered=await renderMpcChop(sourceBuffer,boundaries[i],rate);
+      entries.push({name,frames:rendered.length});
+      files.push({name:kit+'_[ProjectData]/'+name,data:new Uint8Array(audioBufferToWav(rendered))});
+    }
+    setMessage('Writing MPC Sample project and packaging samples…');
+    const project=MpcKitExport.buildProject(mpcDeviceTemplate,kit,entries,bpm,bars);
+    const xpj=await MpcKitExport.encodeProject(project);
+    files.unshift({name:kit+'.xpj',data:xpj});
+    const notes='MPCTube → Akai MPC Sample\\n'
+      +'Kit: '+kit+'\\nSource: '+(chosenSource?.title||'Current source')+'\\n'
+      +'Pads: A01-A16 (matching pad numbers)\\nTarget tempo: '+bpm+' BPM\\n'
+      +'Chops are trimmed and pitch/tempo playback rate is baked into 44.1 kHz 16-bit stereo WAVs.\\n'
+      +'Recorded mix layers and sequences are not exported.\\n\\n'
+      +'HOW TO LOAD\\n1. Unzip this package.\\n'
+      +'2. Copy '+kit+'.xpj AND '+kit+'_[ProjectData]/ together to your MPC Sample microSD card.\\n'
+      +'3. On the MPC Sample, use Project > Load Project and select '+kit+'.xpj.\\n'
+      +'The project uses your device-saved .xpj template for firmware compatibility.\\n';
+    files.push({name:'READ ME - MPC Sample.txt',data:new TextEncoder().encode(notes.replace(/\\n/g,'\n'))});
+    const zip=MpcKitExport.zipFiles(files);
+    MpcKitExport.download(zip,kit+' - MPC Sample Kit.zip');
+    setMessage('MPC Sample kit exported: 16 WAV chops and native .XPJ project. Unzip and copy both project and data folder to the microSD card.');
+  }catch(err){
+    console.error('MPC Sample export failed:',err);
+    setMessage('MPC Sample export failed: '+(err?.message||'unknown error'),true);
+  }finally{mpcKitButton.disabled=false}
+}
+document.querySelector('#chooseMpcTemplate').addEventListener('click',()=>{mpcExportAfterPicker=false;mpcTemplateFile.click()});
+mpcTemplateFile.addEventListener('change',async()=>{
+  const file=mpcTemplateFile.files?.[0],startExport=mpcExportAfterPicker;
+  mpcExportAfterPicker=false;mpcTemplateFile.value='';
+  if(!file)return;
+  try{await storeMpcTemplate(file);if(startExport)await exportMpcSampleKit()}
+  catch(err){setMessage('MPC template setup failed: '+(err?.message||'Invalid project'),true)}
+});
+mpcKitButton.addEventListener('click',async()=>{await mpcTemplateRestore;exportMpcSampleKit()});
+
 async function exportWav(){if(!buffer||!layers.some(l=>!l.muted&&l.events.length))return setMessage('Nothing recorded to export.',true);const duration=loopDuration(),sr=buffer.sampleRate,offline=new OfflineAudioContext(2,Math.ceil(duration*sr),sr),gain=offline.createGain();gain.gain.value=Number(els.master.value);gain.connect(offline.destination);for(const layer of layers){if(layer.muted)continue;for(const offset of layerRepeats(layer))for(const e of layer.events){if(offset+eventTime(e)<duration)makeSourceOffline(offline,gain,e,layer,offset)}}setMessage('Rendering '+loopBars()+'-bar loop WAV…');try{const rendered=await offline.startRendering();smoothLoopSeam(rendered);const wav=audioBufferToWav(rendered),blob=new Blob([wav],{type:'audio/wav'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='sample-loop-'+loopBars()+'bar-'+Math.round(clampBpm(els.targetBpm.value))+'bpm-'+new Date().toISOString().replace(/[:.]/g,'-')+'.wav';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);setMessage('Loop WAV exported with an 8 ms seamless-wrap crossfade.')}catch(err){console.error(err);setMessage('Could not render WAV.',true)}}
 function makeSourceOffline(offline,dest,e,layer,offset=0){const src=sourceForEvent(e);if(!src?.buffer)return;const s=offline.createBufferSource(),gain=offline.createGain();s.buffer=src.buffer;s.playbackRate.value=e.rate||1;gain.gain.value=(e.velocity??1)*layerVolume(layer);s.connect(gain);gain.connect(dest);s.start(offset+eventTime(e),e.start??0,recordedEventDuration(layer,e))}
 function audioBufferToWav(b){const channels=b.numberOfChannels,samples=b.length,bytes=44+samples*channels*2,ab=new ArrayBuffer(bytes),v=new DataView(ab);let o=0;const str=s=>{for(let i=0;i<s.length;i++)v.setUint8(o++,s.charCodeAt(i))},u32=n=>{v.setUint32(o,n,true);o+=4},u16=n=>{v.setUint16(o,n,true);o+=2};str('RIFF');u32(bytes-8);str('WAVE');str('fmt ');u32(16);u16(1);u16(channels);u32(b.sampleRate);u32(b.sampleRate*channels*2);u16(channels*2);u16(16);str('data');u32(samples*channels*2);const data=Array.from({length:channels},(_,c)=>b.getChannelData(c));for(let i=0;i<samples;i++)for(let c=0;c<channels;c++){const x=Math.max(-1,Math.min(1,data[c][i]));v.setInt16(o,x<0?x*32768:x*32767,true);o+=2}return ab}
