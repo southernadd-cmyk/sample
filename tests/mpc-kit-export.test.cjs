@@ -80,3 +80,18 @@ test('UI loads exporter before app and uses consistent IDs',()=>{
 test('safe filenames cannot escape the project folder',()=>{
   assert.equal(exporter.safeName('../My: Broken/Kit'), 'My BrokenKit');
 });
+
+test('MPC Export starts Save As, never opens the template file picker',()=>{
+  const app=fs.readFileSync(path.join(__dirname,'../docs/app.js'),'utf8');
+  const start=app.indexOf('async function exportMpcSampleKit(){');
+  const end=app.indexOf("document.querySelector('#chooseMpcTemplate')",start);
+  const exportCode=app.slice(start,end);
+  assert.ok(start>0&&end>start);
+  assert.match(exportCode,/showSaveFilePicker/);
+  assert.match(exportCode,/MpcKitExport\.download/);
+  assert.doesNotMatch(exportCode,/mpcTemplateFile\.click\(/);
+  assert.match(exportCode,/if\(native\)/);
+  assert.match(exportCode,/PAD MAP\.csv/);
+  assert.match(exportCode,/WAV CHOPS ONLY/);
+  assert.match(app,/mpcKitButton\.addEventListener\('click',exportMpcSampleKit\)/);
+});
