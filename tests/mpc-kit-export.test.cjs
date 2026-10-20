@@ -76,3 +76,7 @@ test('UI loads exporter before app and uses consistent IDs',()=>{
     assert.match(app,new RegExp('#'+id));
   }
 });
+
+test('safe filenames cannot escape the project folder',()=>{
+  assert.equal(exporter.safeName('../My: Broken/Kit'), 'My BrokenKit');
+});
