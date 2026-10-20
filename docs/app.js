@@ -1124,7 +1124,7 @@ const mpcKitButton=document.querySelector('#exportMpcKit');
 const mpcTemplateFile=document.querySelector('#mpcTemplateFile');
 const mpcTemplateStatus=document.querySelector('#mpcTemplateStatus');
 function updateMpcExportUi(){
-  if(mpcTemplateStatus)mpcTemplateStatus.textContent=mpcDeviceTemplate?'NATIVE XPJ EXPORT READY — DEVICE TEMPLATE STORED':'WAV-ONLY EXPORT READY · LOAD AN EMPTY DEVICE .XPJ FOR AUTOMATIC PAD ASSIGNMENT';
+  if(mpcTemplateStatus)mpcTemplateStatus.textContent=mpcDeviceTemplate?'DEVICE TEMPLATE OVERRIDE ACTIVE — XPJ READY':'BUILT-IN MPC SAMPLE .XPJ READY — NO SETUP REQUIRED';
 }
 async function storeMpcTemplate(file){
   if(!file?.name?.toLowerCase().endsWith('.xpj'))throw Error('Choose a .xpj project saved from your MPC Sample.');
@@ -1134,7 +1134,7 @@ async function storeMpcTemplate(file){
   try{localStorage.setItem(MpcKitExport.storageKey,MpcKitExport.encodedBase64(original))}
   catch(err){console.warn('MPC template cannot be persisted locally:',err)}
   updateMpcExportUi();
-  setMessage('MPC Sample template loaded. Future kits can be exported with one click.');
+  setMessage('Device template loaded as optional compatibility override. Native kit export is ready.');
 }
 const mpcTemplateRestore=(async()=>{
   try{
@@ -1179,12 +1179,13 @@ async function exportMpcSampleKit(){
       }
     }
     await mpcTemplateRestore;
+    const projectTemplate=mpcDeviceTemplate||await MpcKitExport.loadBundledTemplate();
     saveActiveSourceState();
     const chosenSource=activeSource(),sourceBuffer=chosenSource?.buffer||buffer;
     const boundaries=(chosenSource?.pads||pads).map(p=>({...p}));
     if(boundaries.length!==16||boundaries.some(p=>!Number.isFinite(p.start)||!Number.isFinite(p.end)||p.start<0||p.end<=p.start||p.end>sourceBuffer.duration+.001))throw Error('Some pad chop boundaries are invalid.');
     const rate=getPlaybackRate(),bpm=clampBpm(els.targetBpm.value),bars=loopBars();
-    const native=!!mpcDeviceTemplate;
+    const native=true;
     const wavFolder=native?kit+'_[ProjectData]/':kit+'/';
     const files=[],entries=[];
     for(let i=0;i<16;i++){
@@ -1196,7 +1197,7 @@ async function exportMpcSampleKit(){
     }
     if(native){
       setMessage('Writing native MPC Sample XPJ project…');
-      const project=MpcKitExport.buildProject(mpcDeviceTemplate,kit,entries,bpm,bars);
+      const project=MpcKitExport.buildProject(projectTemplate,kit,entries,bpm,bars);
       files.unshift({name:kit+'.xpj',data:await MpcKitExport.encodeProject(project)});
     }
     const mapping=['MPCTube Pad,WAV File',...entries.map((entry,i)=>
@@ -1233,9 +1234,7 @@ async function exportMpcSampleKit(){
     }else{
       MpcKitExport.download(zip,filename);
     }
-    setMessage(native
-      ?'MPC Sample kit saved: 16 WAV chops + native XPJ with pads A01-A16.'
-      :'16 WAV chops saved in a ZIP. To auto-assign them to MPC Sample pads, choose a device .xpj separately under MPC Sample Kit Setup and export again.');
+    setMessage('MPC Sample kit saved: native .XPJ plus 16 WAV chops mapped to pads A01–A16.');
   }catch(err){
     console.error('MPC Sample export failed:',err);
     setMessage('MPC Sample export failed: '+(err?.message||'unknown error'),true);

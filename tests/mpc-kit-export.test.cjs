@@ -37,9 +37,9 @@ test('pad mapping, source samples, BPM and clip cleanup are preserved',()=>{
   });
   assert.equal(result.tracks[0].program.drum.instruments[16].layersv.length,0);
   assert.equal(result.sequences[0].value.bpm,94);
-  assert.equal(result.sequences[0].value.lengthBars,4);
-  assert.equal(result.sequences[0].value.trackClipMaps[0][0].key,kit);
-  assert.deepEqual(result.sequences[0].value.trackClipMaps[0][0].value.eventList.events,[]);
+  assert.equal(result.sequences[0].value.lengthBars,2,'native sequence lengths are not rebuilt');
+  assert.equal(result.sequences[0].value.trackClipMaps[0][0].key,'Drum 1');
+  assert.deepEqual(result.sequences[0].value.trackClipMaps[0][0].value.eventList.events,[{note:36}],'template sequence data is preserved');
   assert.equal(template.doc.data.tracks[0].name,'Drum 1','source template must remain untouched');
 });
 test('generated XPJ can be decompressed and read back',async()=>{
@@ -94,4 +94,40 @@ test('MPC Export starts Save As, never opens the template file picker',()=>{
   assert.match(exportCode,/PAD MAP\.csv/);
   assert.match(exportCode,/WAV CHOPS ONLY/);
   assert.match(app,/mpcKitButton\.addEventListener\('click',exportMpcSampleKit\)/);
+});
+
+test('built-in MPC Sample project is available with no user-provided template',async()=>{
+  const raw=fs.readFileSync(path.join(__dirname,'../docs/mpc-sample-template.json'),'utf8');
+  assert.ok(raw.length<500000,'bundled template should stay compact');
+  const template=exporter.parseBundledTemplateText(raw);
+  assert.equal(template.doc.data.lastSavedProductIdentifier,'AC50');
+  const instruments=template.doc.data.tracks[0].program.drum.instruments;
+  assert.equal(instruments.length,128);
+  assert.notEqual(instruments[0],instruments[1]);
+  assert.equal(instruments[0].layersv.length,8);
+  assert.equal(template.doc.data.samples.length,0);
+  const project=exporter.buildProject(template,'No Setup',entries(),104,2);
+  const bytes=await exporter.encodeProject(project);
+  const plain=zlib.gunzipSync(Buffer.from(bytes)).toString('utf8');
+  assert.ok(plain.startsWith('ACVS\n1.3.0.12\nSerialisableProjectData\njson\nLinux\n'));
+  assert.ok(plain.includes('"gainCoefficient":1.0'),'typed floating numbers must retain decimal syntax');
+  assert.ok(plain.includes('"tempo":104.0'),'sample tempo must be encoded as decimal');
+  assert.ok(!plain.includes('__MPCTUBE_FLOAT_'),'placeholder must not reach the device');
+  const restored=await exporter.parseTemplate(bytes);
+  assert.equal(restored.doc.data.tracks[0].program.drum.instruments.length,128);
+  assert.equal(restored.doc.data.samples.length,16);
+  assert.equal(restored.doc.data.tracks[0].program.drum.instruments[0].layersv[0].sampleFile,'A01.wav');
+  assert.equal(restored.doc.data.tracks[0].program.drum.instruments[15].layersv[0].sampleEnd,22065);
+});
+test('Export always includes native XPJ without template picker',()=>{
+  const app=fs.readFileSync(path.join(__dirname,'../docs/app.js'),'utf8');
+  const html=fs.readFileSync(path.join(__dirname,'../docs/index.html'),'utf8');
+  const start=app.indexOf('async function exportMpcSampleKit(){');
+  const end=app.indexOf("document.querySelector('#chooseMpcTemplate')",start);
+  const body=app.slice(start,end);
+  assert.match(body,/mpcDeviceTemplate\|\|await MpcKitExport\.loadBundledTemplate\(\)/);
+  assert.match(body,/const native=true/);
+  assert.match(body,/\.xpj'/);
+  assert.doesNotMatch(body,/mpcTemplateFile\.click\(/);
+  assert.ok(html.includes('mpc-sample-template.json')===false,'template should be fetched by exporter only');
 });
