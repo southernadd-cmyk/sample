@@ -42,33 +42,31 @@ Z  X  C  V
 The browser stores the performance as timed pad-trigger events. WAV export uses an OfflineAudioContext, so no server-side audio rendering is needed.
 
 
-## Exporting a hardware-ready Akai MPC Sample kit
+## Exporting an Akai MPC Sample kit
 
-The **Export MPC Sample Kit** button in the GitHub Pages version exports the
-**currently active source's 16 edited chops**, not the recorded performance
-layers. The ZIP contains a firmware-compatible `.xpj` drum project, plus
-`<KitName>_[ProjectData]/A01.wav` through `A16.wav`.
+**Export MPC Sample Kit always initiates saving a ZIP**, never opening a file
+to import. In browsers that support the File System Access API, Chrome displays
+a native **Save As** dialog. Other browsers use a normal file download.
 
-**One-time hardware setup:** on your Akai MPC Sample, create and save a new,
-empty project containing a drum track. Copy its `.xpj` file to your computer.
-On MPCTube, open **MPC Sample Kit Export · First-time Setup** and select it.
-The compressed template is retained in the current browser's local storage;
-nothing is uploaded to the server. MPCTube uses your device's project
-structure as the basis for each new kit because firmware versions differ.
-To change devices/firmware, select a new template.
+The ZIP always includes 16 individual 44.1 kHz, 16-bit stereo WAV chops from
+the active source with their edited boundaries and tempo/pitch playback rate
+baked in, plus a `PAD MAP.csv` file for pads A01–A16. Recorded performances
+are not exported.
 
-Then capture/chop a source and click **Export MPC Sample Kit**. Unzip the ZIP
-and transfer **both** `<KitName>.xpj` and the matching
-`<KitName>_[ProjectData]` folder together onto the microSD card. Load the
-project in the MPC Sample's Project menu. The per-pad WAVs are rendered as
-44.1 kHz 16-bit stereo, with the current playback tempo/pitch rate baked into
-the audio. Pad A01 in MPCTube maps to hardware A01, and so on through A16.
+**Optional native MPC Sample project:** Automatic mapping on hardware requires
+a firmware-compatible `.xpj` template. On your MPC Sample, save an empty drum
+project and transfer its `.xpj` to your computer. In MPCTube, expand
+**MPC Sample Kit Setup · Optional Native Project** and click
+**Load / Change Device .XPJ Template**. The device file is imported *only*
+through that button, not via the Export action. MPCTube stores the template
+locally in your browser. Subsequent exports then include `<KitName>.xpj`
+and a matching `<KitName>_[ProjectData]/` WAV folder alongside the pad map.
 
-Recorded layer performances are **not** transferred, and the physical pad
-orientation may differ from MPCTube's on-screen grid; pad **numbers** are the
-mapping. Actual on-device loading depends on the user's firmware and must be
-verified with a real MPC Sample. The standalone exporter is covered by
-`node --test tests/mpc-kit-export.test.cjs`.
+Without a template the saved ZIP contains only a WAV folder and pad map,
+so pad assignments must be made manually on the MPC Sample; the export
+message makes this limitation explicit. Unzip native kits and transfer
+both the `.xpj` and matching `_[ProjectData]` folder to the microSD card.
+Actual on-device loading should be verified on a physical MPC Sample.
 
 ## Run locally
 
